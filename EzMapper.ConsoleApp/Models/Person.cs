@@ -11,8 +11,14 @@ namespace EzMapper.ConsoleApp.Models
     {
         [PrimaryKey]
         public int ID { get; set; }
+
+        [Unique]
         public string FirstName { get; set; }
+
+        [NotNull]
         public string LastName { get; set; }
+
+        [DefaultValue("23")]
         public int Age { get; set; }
     }
 }

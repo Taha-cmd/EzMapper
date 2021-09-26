@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31702.278
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EzMapper", "EzMapper\EzMapper.csproj", "{356FC52E-BA9F-463F-A8D7-BBC5DB285D8B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EzMapper", "EzMapper\EzMapper.csproj", "{356FC52E-BA9F-463F-A8D7-BBC5DB285D8B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EzMapper.ConsoleApp", "EzMapper.ConsoleApp\EzMapper.ConsoleApp.csproj", "{5AFC57B1-9E6E-4D7F-8CA8-06F6F63157DA}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EzMapper.ConsoleApp", "EzMapper.ConsoleApp\EzMapper.ConsoleApp.csproj", "{5AFC57B1-9E6E-4D7F-8CA8-06F6F63157DA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EzMapper.Tests", "EzMapper.Tests\EzMapper.Tests.csproj", "{B305D099-3E73-4169-B279-B6459520217C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{5AFC57B1-9E6E-4D7F-8CA8-06F6F63157DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5AFC57B1-9E6E-4D7F-8CA8-06F6F63157DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5AFC57B1-9E6E-4D7F-8CA8-06F6F63157DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B305D099-3E73-4169-B279-B6459520217C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B305D099-3E73-4169-B279-B6459520217C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B305D099-3E73-4169-B279-B6459520217C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B305D099-3E73-4169-B279-B6459520217C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
