@@ -11,6 +11,8 @@ namespace EzMapper.ConsoleApp.Models
     {
         public string School { get; set; }
 
-        public Car Car { get; set; } = new Car { ID = 1, Brand = "Volvo" };
+        public Phone Phone { get; set; } = new Phone() { ID = 3,Brand = "Nokia" };
+
+        
     }
 }

@@ -7,18 +7,16 @@ using System.Linq;
 using System.Text;
 using System.Reflection;
 using EzMapper.Attributes;
+using System.Collections.Generic;
 
 namespace EzMapper
 {
     public class Class1
     {
-        private readonly DbCommandBuilder builder;
-        private readonly DbDataAdapter adapter;
-        private readonly DbDataReader reader;
+
         public Class1()
         {
-            builder = new SQLiteCommandBuilder();
-            adapter = new SQLiteDataAdapter();
+
         }
 
         public static void TestCrud(object model)
@@ -65,10 +63,15 @@ namespace EzMapper
             return model.GetType().BaseType.FullName != typeof(object).FullName;
         }
 
+        //public static Type GetParentModelType(object model)
+        //{
+           
+        //    return model.GetType().BaseType.
+        //}
+
         private static bool IsPrimitive(Type t)
         {
             bool isPrimitiveType = t.IsPrimitive || t.IsValueType || (t == typeof(string));
-            Console.WriteLine($"Is {{ {t} }} Primitive? {isPrimitiveType}");
             return isPrimitiveType;
         }
 
@@ -76,7 +79,6 @@ namespace EzMapper
         {
             if (obj is null)
             {
-                Console.WriteLine($"NULL");
                 return false;
             }
 
@@ -88,8 +90,6 @@ namespace EzMapper
                     return IsPrimitive(Nullable.GetUnderlyingType(t));
             }
                 
-
-
             return IsPrimitive(t);
         }
 
@@ -112,44 +112,76 @@ namespace EzMapper
             return false; // value-type
         }
 
-        public static string CreateTable(object model)
-        {
-            var props = model.GetType().GetProperties().ToList();
-            string primaryKey = GetPrimaryKeyPropertyName(model);
+        public static Dictionary<string, string> foriegnKeys = new();
 
-            var builder = new StringBuilder($"CREATE TABLE [IF NOT EXISTS] {model.GetType().Name} (");
+        public static void printForeignKeys()
+        {
+            foreach(var kvp in foriegnKeys)
+            {
+                Console.WriteLine("\n\n\n\n\n" + kvp.Key + " references " + kvp.Value + "\n\n\n\n\n");
+            }
+        }
+
+        public static string CreateTable<T>(T model) where T : class
+        {
+            //TODO: create foreign keys
+            var builder = new StringBuilder();
+            string primaryKey = string.Empty;
+
+            if (HasParentModel(model))
+                Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
+
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
+
+            if (!HasParentModel(model))
+                primaryKey = GetPrimaryKeyPropertyName(props.ToArray());
+            else
+                primaryKey = "ID";
+
+            builder.Append($"CREATE TABLE [IF NOT EXISTS] {model.GetType().Name} (");
             builder.Append($" {primaryKey} INTEGER PRIMARY KEY, ");
+
+            var fks = new List<ForeignKey>();
 
             foreach(var prop in props.Where(prop => prop.Name != primaryKey))
             {
                 if (!IsPrimitive(model, prop.Name))
+                {
                     Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTable(prop.GetValue(model)));
+                    builder.Append($" {prop.Name}ID INTEGER, ");
+                    fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
+                    continue;
+                }
 
                 builder.Append($" {prop.Name} INTEGER");
-                builder.Append($" {(HasAttribute<NotNullAttribute>(prop) ? "" : "NOT NULL")}");
+                builder.Append($" {(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name) ? "NOT NULL" : " ")}");
                 builder.Append($" {(HasAttribute<UniqueAttribute>(prop) ? "UNIQUE" : "")}");
                 builder.Append($" {(HasAttribute<DefaultValueAttribute>(prop) ?  "DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value : "")}");
                 builder.Append(',');
             }
 
+            //FOREIGN KEY(CardID) REFERENCES Car(ID)
+
+            foreach (var fk in fks)
+            {
+                builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
+            }
 
             builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
             builder.Append(");");
             return builder.ToString();
 
-
-            
         }
 
         public static bool HasAttribute<T>(PropertyInfo prop) where T : Attribute
         {
             return prop.CustomAttributes.Where(attr => attr.AttributeType.Name == typeof(T).Name).ToArray().Length == 1;
-            //return prop.CustomAttributes.Where(attr => )
         }
 
-        public static string GetPrimaryKeyPropertyName(object model)
+        public static string GetPrimaryKeyPropertyName(params PropertyInfo[] props)
         {
-            var props = model.GetType().GetProperties().ToList();
+            Assert.NotNull(props, nameof(props));
+
 
             // validate that primary key attribute is used once at most (0 or 1)
             var filteredPropsByAttribute = props.Where(prop => HasAttribute<PrimaryKeyAttribute>(prop)).ToList();
@@ -170,17 +202,18 @@ namespace EzMapper
 
                 //no key found
                 if (filteredPropsByName.Count == 0)
-                    throw new Exception($"{model} does not have a primary key. No Attribute nor ID Property found");
+                    throw new Exception($"No candidate for primary key found. No Attribute nor ID Property found");
 
                 primaryKeyPropertyName = filteredPropsByName[0].Name;
             }
 
-
             //check for datatype
-            if (model.GetType().GetProperty(primaryKeyPropertyName).PropertyType != typeof(int))
+            if (props.Where(prop => prop.Name == primaryKeyPropertyName).First().PropertyType != typeof(int))
                 throw new Exception($"{primaryKeyPropertyName} is not an integer. Primary key should be an integer");
 
             return primaryKeyPropertyName;
         }
     }
+
+    
 }

@@ -20,5 +20,7 @@ namespace EzMapper.ConsoleApp.Models
 
         [DefaultValue("23")]
         public int Age { get; set; }
+
+        public Car Car { get; set; } = new Car { ModelNumber = 1, Brand = "Volvo" };
     }
 }

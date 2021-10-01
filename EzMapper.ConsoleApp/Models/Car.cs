@@ -1,4 +1,5 @@
-﻿using System;
+﻿using EzMapper.Attributes;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,7 +9,8 @@ namespace EzMapper.ConsoleApp.Models
 {
     public class Car : IModel
     {
-        public int ID { get; set; }
+        [PrimaryKey]
+        public int ModelNumber { get; set; }
 
         public string Brand { get; set; }
     }
