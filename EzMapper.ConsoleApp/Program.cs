@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using EzMapper.Attributes;
@@ -12,8 +13,9 @@ namespace EzMapper.ConsoleApp
         {
             var wewewe = Nullable.GetUnderlyingType(typeof(string));
 
-            var person = new Person() { ID = 1, Age = 18, FirstName = "John", LastName = "Doe" };
-            var student = new Student() { ID = 2, Age = 19, FirstName = "Jane", LastName = "Doe", School = "FH Technikum" };
+            var p1 = new Person() { ID = 1, Age = 18, FirstName = "John", LastName = "Doe" };
+            var p2 = new Student() { ID = 2, Age = 19, FirstName = "Jane", LastName = "Doe", School = "FH Technikum" };
+            var p3 = new Teacher() { ID = 2, Age = 19, FirstName = "Jane", LastName = "Doe", WorkingYears = 4};
 
             //var x = Class1.GetParentModel(student);
 
@@ -29,7 +31,9 @@ namespace EzMapper.ConsoleApp
             //Class1.TestInheritance(student);
             //Class1.TestInheritance(person);
 
-            Console.WriteLine(Class1.CreateTable(student));
+            File.WriteAllText("test.txt", Class1.CreateTable(p2));
+
+            Console.WriteLine(Class1.CreateTable(p2));
             Class1.printForeignKeys();
             //Console.WriteLine(Class1.HasAttribute<DefaultValueAttribute>(person.GetType().GetProperty("Age")));
 

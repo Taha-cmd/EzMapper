@@ -124,46 +124,54 @@ namespace EzMapper
 
         public static string CreateTable<T>(T model) where T : class
         {
-            //TODO: create foreign keys
             var builder = new StringBuilder();
             string primaryKey = string.Empty;
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
+            var fks = new List<ForeignKey>();
 
             if (HasParentModel(model))
-                Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
-
-            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
+            {
+                builder.Insert(0, CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
+                //Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
+            }
 
             if (!HasParentModel(model))
+            {
                 primaryKey = GetPrimaryKeyPropertyName(props.ToArray());
+            }
             else
-                primaryKey = "ID";
+            {
+                primaryKey = model.GetType().BaseType.Name + "ID";
+                fks.Add(new ForeignKey() { FieldName = primaryKey, TargetTable = model.GetType().BaseType.Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray()) });
+            }
 
-            builder.Append($"CREATE TABLE [IF NOT EXISTS] {model.GetType().Name} (");
+            builder.Append($"CREATE TABLE IF NOT EXISTS {model.GetType().Name} (");
             builder.Append($" {primaryKey} INTEGER PRIMARY KEY, ");
 
-            var fks = new List<ForeignKey>();
+            
 
             foreach(var prop in props.Where(prop => prop.Name != primaryKey))
             {
                 if (!IsPrimitive(model, prop.Name))
                 {
-                    Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTable(prop.GetValue(model)));
+                    //Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTable(prop.GetValue(model)));
+                    builder.Insert(0, CreateTable(prop.GetValue(model)));
                     builder.Append($" {prop.Name}ID INTEGER, ");
                     fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
                     continue;
                 }
 
                 builder.Append($" {prop.Name} INTEGER");
-                builder.Append($" {(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name) ? "NOT NULL" : " ")}");
+                builder.Append($" {(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name) ? "NOT NULL" : "")}");
                 builder.Append($" {(HasAttribute<UniqueAttribute>(prop) ? "UNIQUE" : "")}");
                 builder.Append($" {(HasAttribute<DefaultValueAttribute>(prop) ?  "DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value : "")}");
                 builder.Append(',');
             }
 
-            //FOREIGN KEY(CardID) REFERENCES Car(ID)
-
+            
             foreach (var fk in fks)
             {
+                //FOREIGN KEY(CardID) REFERENCES Car(ID)
                 builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
             }
 
