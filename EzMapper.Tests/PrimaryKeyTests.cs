@@ -16,7 +16,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithTwoPrimaryKeys();
 
-            Assert.Throws<Exception>(() => Class1.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
+            Assert.Throws<Exception>(() => EzMapper.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
         }
 
         [Test]
@@ -25,7 +25,7 @@ namespace EzMapper.Tests
             var model = new ModelWithPrimaryKeyAttribute();
 
             var actual = nameof(model.X);
-            var returned = Class1.GetPrimaryKeyPropertyName(model.GetType().GetProperties());
+            var returned = EzMapper.GetPrimaryKeyPropertyName(model.GetType().GetProperties());
 
             Assert.IsTrue(actual == returned);
         }
@@ -35,7 +35,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithNoAttribute();
 
-            var returned = Class1.GetPrimaryKeyPropertyName(model.GetType().GetProperties());
+            var returned = EzMapper.GetPrimaryKeyPropertyName(model.GetType().GetProperties());
 
             Assert.IsTrue("ID" == returned.ToUpper());
         }
@@ -45,7 +45,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithNoPrimaryKey();
 
-            Assert.Throws<Exception>(() => Class1.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
+            Assert.Throws<Exception>(() => EzMapper.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
         }
 
         [Test]
@@ -53,7 +53,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithWrongPrimaryKeyDataType();
 
-            Assert.Throws<Exception>(() => Class1.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
+            Assert.Throws<Exception>(() => EzMapper.GetPrimaryKeyPropertyName(model.GetType().GetProperties()));
         }
         
     }

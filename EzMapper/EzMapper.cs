@@ -8,13 +8,14 @@ using System.Text;
 using System.Reflection;
 using EzMapper.Attributes;
 using System.Collections.Generic;
+using System.Collections;
 
 namespace EzMapper
 {
-    public class Class1
+    public class EzMapper
     {
 
-        public Class1()
+        public EzMapper()
         {
 
         }
@@ -93,6 +94,14 @@ namespace EzMapper
             return IsPrimitive(t);
         }
 
+        public static bool IsCollection(Type t)
+        {
+            if (t == typeof(string))
+                return false;
+
+            return typeof(IList).IsAssignableFrom(t) || t.IsArray;
+        }
+
         public static bool IsNullable(object model, string propertyName)
         {
             if (model == null) return true; // obvious
@@ -112,6 +121,14 @@ namespace EzMapper
             return false; // value-type
         }
 
+        public static Type GetElementType(Type type) // returns the element type from a collection type (arrays and lists)
+        {
+            if (type.IsArray)
+                return type.GetElementType();
+
+            return type.GenericTypeArguments[0];
+        }
+
         public static Dictionary<string, string> foriegnKeys = new();
 
         public static void printForeignKeys()
@@ -122,17 +139,31 @@ namespace EzMapper
             }
         }
 
-        public static string CreateTable<T>(T model) where T : class
+
+        public static string[] CreateTable<T>(T model) where T : class
         {
+            string statements = CreateTableIntern(model);
+
+            return statements.Split(";");
+        }
+        private static string CreateTableIntern(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null)
+        {
+
             var builder = new StringBuilder();
             string primaryKey = string.Empty;
-            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
-            var fks = new List<ForeignKey>();
+            var props = model?.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
+            tableName ??= model.GetType().Name;
+
+            var fks = foreignKeys is null ? new List<ForeignKey>() : foreignKeys;
+            var columns = cols is null ? new List<Column>() : cols;
+
+            if (model is null)
+                goto TableBulding;
 
             if (HasParentModel(model))
             {
-                builder.Insert(0, CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
-                //Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTable(Activator.CreateInstance(model.GetType().BaseType)));
+                //Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTableIntern(Activator.CreateInstance(model.GetType().BaseType)));
+                builder.Insert(0, CreateTableIntern(Activator.CreateInstance(model.GetType().BaseType)));
             }
 
             if (!HasParentModel(model))
@@ -145,30 +176,80 @@ namespace EzMapper
                 fks.Add(new ForeignKey() { FieldName = primaryKey, TargetTable = model.GetType().BaseType.Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray()) });
             }
 
-            builder.Append($"CREATE TABLE IF NOT EXISTS {model.GetType().Name} (");
-            builder.Append($" {primaryKey} INTEGER PRIMARY KEY, ");
+            columns.Add(new Column() { Name = primaryKey, Constrains = new string[] { "PRIMARY KEY" }.ToList() });
 
-            
-
-            foreach(var prop in props.Where(prop => prop.Name != primaryKey))
+            foreach(var prop in props?.Where(prop => prop.Name != primaryKey))
             {
                 if (!IsPrimitive(model, prop.Name))
                 {
-                    //Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTable(prop.GetValue(model)));
-                    builder.Insert(0, CreateTable(prop.GetValue(model)));
-                    builder.Append($" {prop.Name}ID INTEGER, ");
-                    fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
+                    //a non primitive could be an object or a collection
+
+                    if(IsCollection(prop.PropertyType))
+                    {
+                        // 1:n relationships
+                        // check for element type again, recursive call for non primitves
+                        Type elementType = GetElementType(prop.PropertyType);
+                        var tableCols = new List<Column>();
+                        var tableFks = new List<ForeignKey>();
+
+                        tableCols.Add(new Column() { Name = $"{model.GetType().Name}ID" });
+                        tableFks.Add(new ForeignKey() { FieldName = $"{model.GetType().Name}ID", TargetTable = model.GetType().Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray()) });
+
+                        if (IsPrimitive(elementType))
+                        {
+                            //TODO: create table with only 3 fields (a primary key, a foreign key pointing to owner object and the actual value )
+
+                            tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
+                            tableCols.Add(new Column() { Name = prop.Name });
+
+                            //Console.WriteLine("\n\n\n\n primitve collection detected \n\n\n\n\n" + CreateTableIntern(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                            builder.Append(CreateTableIntern(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                        }
+                        else
+                        {
+                            //TODO: find a way to set foreign key in the collection table (1:n)
+                            //Console.WriteLine("\n\n\n\n non primitve collection detected \n\n\n\n\n" + CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
+                            builder.Append(CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
+                            //builder.Insert(0, CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
+                        }
+                    }
+                    else
+                    {
+                        // 1:1 relationships
+                        //Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTableIntern(prop.GetValue(model)));
+                        builder.Insert(0, CreateTableIntern(prop.GetValue(model)));
+
+                        columns.Add(new Column() { Name = $"{prop.Name}ID" });
+                        fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
+                    }
+
                     continue;
                 }
 
-                builder.Append($" {prop.Name} INTEGER");
-                builder.Append($" {(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name) ? "NOT NULL" : "")}");
-                builder.Append($" {(HasAttribute<UniqueAttribute>(prop) ? "UNIQUE" : "")}");
-                builder.Append($" {(HasAttribute<DefaultValueAttribute>(prop) ?  "DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value : "")}");
+                var col = new Column() { Name = prop.Name};
+                
+                if(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name))
+                    col.Constrains.Add("NOT NULL");
+
+                if (HasAttribute<UniqueAttribute>(prop))
+                    col.Constrains.Add("UNIQUE");
+
+                if (HasAttribute<DefaultMemberAttribute>(prop))
+                    col.Constrains.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
+
+                columns.Add(col);
+            }
+
+            TableBulding:
+            builder.Append($"CREATE TABLE IF NOT EXISTS {tableName} (");
+            
+            foreach (var col in columns)
+            {
+                builder.Append($" {col.Name} {col.Type} ");
+                col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
                 builder.Append(',');
             }
 
-            
             foreach (var fk in fks)
             {
                 //FOREIGN KEY(CardID) REFERENCES Car(ID)
@@ -178,7 +259,6 @@ namespace EzMapper
             builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
             builder.Append(");");
             return builder.ToString();
-
         }
 
         public static bool HasAttribute<T>(PropertyInfo prop) where T : Attribute
