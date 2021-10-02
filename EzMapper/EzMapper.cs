@@ -15,9 +15,90 @@ namespace EzMapper
     public class EzMapper
     {
 
-        public EzMapper()
-        {
+        //TODO: implement m:n
 
+        private static List<Type> _types = new();
+        private static bool _isBuilt = false;
+        private EzMapper() { }
+        public static void Register<T>() where T : class
+        {
+            if (_isBuilt)
+                throw new Exception("The database has allready benn built. You can't register more types");
+
+            _types.Add(typeof(T));
+        }
+
+        public static void Build()
+        {
+            if (_isBuilt) return;
+
+            List<Table> tables = new();
+            List<string> createTableStatements = new();
+
+            _types.ForEach(type => tables.AddRange(CreateTables(type)));
+
+            // in case the user registers a model that is contained in a list within another model,
+            // then this model will be created twice (the second time being when the parent model is registered)
+            // and the foreign key will not be set correctly
+            // this is why we group tables by name (models that were registered more than once)
+            // and take the one with the most columns (the correct one with the foreign key)
+            tables = tables
+                        .GroupBy(table => table.Name)
+                        .Select(g => g.OrderByDescending(table => table.Columns.Count))
+                        .Select(g => g.First())
+                        .OrderByDescending(table => table.ForeignKeys.Count == 0)
+                        .ToList(); //https://stackoverflow.com/questions/489258/linqs-distinct-on-a-particular-property
+
+
+            // the last step will ruin the order and cause tables with foreign keys to come before their parent tables
+            // take each table, and find all other tables that reference it (basically find all child tables to a parent table)
+            // and append them to the list
+            var tmp = new List<Table>();
+            foreach (var table in tables)
+            {
+                tmp.AddRange(
+                    tables.Where(
+                        t => t.ForeignKeys.Where(fk => fk.TargetTable == table.Name).Count() > 0
+                    )
+                );
+            }
+
+            tables.AddRange(tmp);
+
+            // now we have duplicates, the tables at the end are the correct ones
+            tables.Reverse();
+            tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList();
+            tables.Reverse();
+
+
+            var builder = new StringBuilder();
+
+            tables.ForEach(table =>
+            {
+                builder.Append($"CREATE TABLE IF NOT EXISTS {table.Name} (");
+                table.Columns.ForEach(col =>
+                {
+                    builder.Append($" {col.Name} {col.Type} ");
+                    col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
+                    builder.Append(',');
+                });
+
+                table.ForeignKeys.ForEach(fk =>
+                {
+                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
+                });
+
+                builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
+                builder.Append(");");
+            });
+
+
+            foreach (string statement in builder.ToString().Split(';'))
+            {
+                Console.WriteLine(statement);
+            }
+
+            _isBuilt = true;
         }
 
         public static void TestCrud(object model)
@@ -52,23 +133,11 @@ namespace EzMapper
 
         }
 
-        public static void TestInheritance(object model)
-        {
-            Console.WriteLine(model.GetType().BaseType + "; Has parent Model: " + HasParentModel(model));
-
-        }
 
         private static bool HasParentModel(object model)
         {
-            //Console.WriteLine("\n\n" + model.GetType().BaseType.FullName + " =? " +  typeof(object).FullName + "\n\n");
             return model.GetType().BaseType.FullName != typeof(object).FullName;
         }
-
-        //public static Type GetParentModelType(object model)
-        //{
-           
-        //    return model.GetType().BaseType.
-        //}
 
         private static bool IsPrimitive(Type t)
         {
@@ -129,27 +198,13 @@ namespace EzMapper
             return type.GenericTypeArguments[0];
         }
 
-        public static Dictionary<string, string> foriegnKeys = new();
-
-        public static void printForeignKeys()
+        private static IEnumerable<Table> CreateTables(Type type)
         {
-            foreach(var kvp in foriegnKeys)
-            {
-                Console.WriteLine("\n\n\n\n\n" + kvp.Key + " references " + kvp.Value + "\n\n\n\n\n");
-            }
+            return CreateTableHierarchy(Activator.CreateInstance(type));
         }
-
-
-        public static string[] CreateTable<T>(T model) where T : class
+        private static IEnumerable<Table> CreateTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null)
         {
-            string statements = CreateTableIntern(model);
-
-            return statements.Split(";");
-        }
-        private static string CreateTableIntern(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null)
-        {
-
-            var builder = new StringBuilder();
+            List<Table> tables = new();
             string primaryKey = string.Empty;
             var props = model?.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
             tableName ??= model.GetType().Name;
@@ -162,8 +217,7 @@ namespace EzMapper
 
             if (HasParentModel(model))
             {
-                //Console.WriteLine("\n\n\n\n sub class detected \n\n\n\n\n" + CreateTableIntern(Activator.CreateInstance(model.GetType().BaseType)));
-                builder.Insert(0, CreateTableIntern(Activator.CreateInstance(model.GetType().BaseType)));
+                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(model.GetType().BaseType)));
             }
 
             if (!HasParentModel(model))
@@ -197,27 +251,21 @@ namespace EzMapper
 
                         if (IsPrimitive(elementType))
                         {
-                            //TODO: create table with only 3 fields (a primary key, a foreign key pointing to owner object and the actual value )
 
                             tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
                             tableCols.Add(new Column() { Name = prop.Name });
 
-                            //Console.WriteLine("\n\n\n\n primitve collection detected \n\n\n\n\n" + CreateTableIntern(null, tableCols, tableFks, model.GetType().Name + prop.Name));
-                            builder.Append(CreateTableIntern(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                            tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
                         }
                         else
                         {
-                            //TODO: find a way to set foreign key in the collection table (1:n)
-                            //Console.WriteLine("\n\n\n\n non primitve collection detected \n\n\n\n\n" + CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
-                            builder.Append(CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
-                            //builder.Insert(0, CreateTableIntern(Activator.CreateInstance(elementType), tableCols, tableFks));
+                            tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
                         }
                     }
                     else
                     {
                         // 1:1 relationships
-                        //Console.WriteLine("\n\n\n\n non primitve detected \n\n\n\n\n" + CreateTableIntern(prop.GetValue(model)));
-                        builder.Insert(0, CreateTableIntern(prop.GetValue(model)));
+                        tables.AddRange(CreateTableHierarchy(prop.GetValue(model)));
 
                         columns.Add(new Column() { Name = $"{prop.Name}ID" });
                         fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
@@ -240,25 +288,10 @@ namespace EzMapper
                 columns.Add(col);
             }
 
-            TableBulding:
-            builder.Append($"CREATE TABLE IF NOT EXISTS {tableName} (");
-            
-            foreach (var col in columns)
-            {
-                builder.Append($" {col.Name} {col.Type} ");
-                col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
-                builder.Append(',');
-            }
+        TableBulding:
+            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks });
 
-            foreach (var fk in fks)
-            {
-                //FOREIGN KEY(CardID) REFERENCES Car(ID)
-                builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
-            }
-
-            builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
-            builder.Append(");");
-            return builder.ToString();
+            return tables;
         }
 
         public static bool HasAttribute<T>(PropertyInfo prop) where T : Attribute
