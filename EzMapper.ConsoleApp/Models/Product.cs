@@ -7,10 +7,12 @@ using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp.Models
 {
-    public class Teacher : Person
+    class Product
     {
-        public int WorkingYears { get; set; }
-        [Shared]
-        public List<Course> Courses { get; set; }
+        public int ID { get; set; }
+
+        [NotNull]
+        public string Name { get; set; }
+
     }
 }

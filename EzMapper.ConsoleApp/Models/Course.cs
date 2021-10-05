@@ -9,7 +9,7 @@ namespace EzMapper.ConsoleApp.Models
     public class Course
     {
         public int ID { get; set; }
-        public List<Student> Students { get; set; } = new();
+        public string Name { get; set; }
 
     }
 }

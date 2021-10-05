@@ -14,10 +14,13 @@ namespace EzMapper.ConsoleApp
         static void Main(string[] args)
         {
 
-            EzMapper.Register<Book>();
             EzMapper.Register<Student>();
             EzMapper.Register<Teacher>();
             EzMapper.Build();
+
+
+
+
 
 
             //var wewewe = Nullable.GetUnderlyingType(typeof(string));

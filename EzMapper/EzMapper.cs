@@ -17,7 +17,7 @@ namespace EzMapper
 
         //TODO: implement m:n
 
-        private static List<Type> _types = new();
+        private static readonly List<Type> _types = new();
         private static bool _isBuilt = false;
         private EzMapper() { }
         public static void Register<T>() where T : class
@@ -240,27 +240,51 @@ namespace EzMapper
 
                     if(IsCollection(prop.PropertyType))
                     {
-                        // 1:n relationships
-                        // check for element type again, recursive call for non primitves
                         Type elementType = GetElementType(prop.PropertyType);
                         var tableCols = new List<Column>();
                         var tableFks = new List<ForeignKey>();
 
-                        tableCols.Add(new Column() { Name = $"{model.GetType().Name}ID" });
-                        tableFks.Add(new ForeignKey() { FieldName = $"{model.GetType().Name}ID", TargetTable = model.GetType().Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray()) });
-
-                        if (IsPrimitive(elementType))
+                        if (HasAttribute<SharedAttribute>(prop))
                         {
+                            // m:n relathionship
+                            // when we have m:n relationships, both types are non primitives
 
-                            tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-                            tableCols.Add(new Column() { Name = prop.Name });
+                            // create table for the new object
+                            tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType)));
 
-                            tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                            // create assignment table (id, fk1, fk2)
+                            tableCols.Add(new Column() { Name = $"ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
+                            tableCols.Add(new Column() { Name = $"{tableName}ID" }); // reference parent table
+                            tableCols.Add(new Column() { Name = $"{elementType.Name}ID" }); // reference child table
+
+                            tableFks.Add(new ForeignKey() { FieldName = $"{tableName}ID", TargetTable = model.GetType().Name, TargetField = primaryKey });
+                            tableFks.Add(new ForeignKey() { FieldName = $"{elementType.Name}ID", TargetTable = elementType.Name, TargetField = GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray()) });
+
+                            tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
+
                         }
                         else
                         {
-                            tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
+                            // 1:n relationships
+                            // check for element type again, recursive call for non primitves
+   
+                            tableCols.Add(new Column() { Name = $"{model.GetType().Name}ID" });
+                            tableFks.Add(new ForeignKey() { FieldName = $"{model.GetType().Name}ID", TargetTable = model.GetType().Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray()) });
+
+                            if (IsPrimitive(elementType))
+                            {
+
+                                tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
+                                tableCols.Add(new Column() { Name = prop.Name });
+
+                                tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                            }
+                            else
+                            {
+                                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
+                            }
                         }
+
                     }
                     else
                     {
