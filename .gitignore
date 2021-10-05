@@ -5,6 +5,7 @@ dist
 dist.zip
 Protocol.docx
 Protocol.pdf
+testdb.db
 
 # User-specific files
 *.suo

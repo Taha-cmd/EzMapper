@@ -11,7 +11,10 @@ namespace EzMapper.ConsoleApp.Models
     {
         public string School { get; set; }
 
-        [ForeignKey("Car")]
-        public int CarID { get; set; }
+        public Phone Phone { get; set; } = new Phone() { ID = 3,Brand = "Nokia" };
+        public Laptop Laptop { get; set; } = new Laptop() { ID = 3, Brand = "Lenovo", CPU = "Intel" };
+        public List<Book> Books { get; set; } = new();
+
+        
     }
 }
