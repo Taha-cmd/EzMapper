@@ -1,21 +1,18 @@
-﻿using System;
-using System.Data.SQLite;
-using System.Data.SQLite.Generic;
-using System.Data.SqlTypes;
-using System.Data.Common;
-using System.Linq;
-using System.Text;
-using System.Reflection;
-using EzMapper.Attributes;
-using System.Collections.Generic;
+﻿using EzMapper.Attributes;
+using EzMapper.Models;
+using EzMapper.Database;
+using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using EzMapper.Reflection;
+using System.Text;
 
 namespace EzMapper
 {
     public class EzMapper
     {
-
-        //TODO: implement m:n
 
         private static readonly List<Type> _types = new();
         private static bool _isBuilt = false;
@@ -33,7 +30,7 @@ namespace EzMapper
             if (_isBuilt) return;
 
             List<Table> tables = new();
-            List<string> createTableStatements = new();
+            //List<string> createTableStatements = new();
 
             _types.ForEach(type => tables.AddRange(CreateTables(type)));
 
@@ -71,29 +68,7 @@ namespace EzMapper
             tables.Reverse();
 
 
-            var builder = new StringBuilder();
-
-            tables.ForEach(table =>
-            {
-                builder.Append($"CREATE TABLE IF NOT EXISTS {table.Name} (");
-                table.Columns.ForEach(col =>
-                {
-                    builder.Append($" {col.Name} {col.Type} ");
-                    col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
-                    builder.Append(',');
-                });
-
-                table.ForeignKeys.ForEach(fk =>
-                {
-                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
-                });
-
-                builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
-                builder.Append(");");
-            });
-
-
-            foreach (string statement in builder.ToString().Split(';'))
+            foreach (string statement in StatementBuilder.CreateCreateStatements(tables))
             {
                 Console.WriteLine(statement);
             }
@@ -133,71 +108,6 @@ namespace EzMapper
 
         }
 
-
-        private static bool HasParentModel(object model)
-        {
-            return model.GetType().BaseType.FullName != typeof(object).FullName;
-        }
-
-        private static bool IsPrimitive(Type t)
-        {
-            bool isPrimitiveType = t.IsPrimitive || t.IsValueType || (t == typeof(string));
-            return isPrimitiveType;
-        }
-
-        public static bool IsPrimitive(object obj, string propertyName)
-        {
-            if (obj is null)
-            {
-                return false;
-            }
-
-            Type t = obj.GetType().GetProperty(propertyName).PropertyType;
-
-            if(IsNullable(obj, propertyName))
-            {
-                if (Nullable.GetUnderlyingType(t) is not null)
-                    return IsPrimitive(Nullable.GetUnderlyingType(t));
-            }
-                
-            return IsPrimitive(t);
-        }
-
-        public static bool IsCollection(Type t)
-        {
-            if (t == typeof(string))
-                return false;
-
-            return typeof(IList).IsAssignableFrom(t) || t.IsArray;
-        }
-
-        public static bool IsNullable(object model, string propertyName)
-        {
-            if (model == null) return true; // obvious
-            PropertyInfo prop = model.GetType().GetProperty(propertyName);
-
-            if (prop.PropertyType == typeof(string))
-            {
-                if (HasAttribute<NotNullAttribute>(prop))
-                    return false;
-            }
-
-            // https://stackoverflow.com/questions/374651/how-to-check-if-an-object-is-nullable/4131871
-
-            Type type = prop.PropertyType;
-            if (!type.IsValueType) return true; // ref-type
-            if (Nullable.GetUnderlyingType(type) != null) return true; // Nullable<T>
-            return false; // value-type
-        }
-
-        public static Type GetElementType(Type type) // returns the element type from a collection type (arrays and lists)
-        {
-            if (type.IsArray)
-                return type.GetElementType();
-
-            return type.GenericTypeArguments[0];
-        }
-
         private static IEnumerable<Table> CreateTables(Type type)
         {
             return CreateTableHierarchy(Activator.CreateInstance(type));
@@ -215,36 +125,36 @@ namespace EzMapper
             if (model is null)
                 goto TableBulding;
 
-            if (HasParentModel(model))
+            if (Types.HasParentModel(model))
             {
                 tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(model.GetType().BaseType)));
             }
 
-            if (!HasParentModel(model))
+            if (!Types.HasParentModel(model))
             {
-                primaryKey = GetPrimaryKeyPropertyName(props.ToArray());
+                primaryKey = SqlTypeInspector.GetPrimaryKeyPropertyName(props.ToArray());
             }
             else
             {
                 primaryKey = model.GetType().BaseType.Name + "ID";
-                fks.Add(new ForeignKey() { FieldName = primaryKey, TargetTable = model.GetType().BaseType.Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray()) });
+                fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray())));
             }
 
-            columns.Add(new Column() { Name = primaryKey, Constrains = new string[] { "PRIMARY KEY" }.ToList() });
+            columns.Add(new Column(primaryKey, "PRIMARY KEY"));
 
             foreach(var prop in props?.Where(prop => prop.Name != primaryKey))
             {
-                if (!IsPrimitive(model, prop.Name))
+                if (!Types.IsPrimitive(model, prop.Name))
                 {
                     //a non primitive could be an object or a collection
 
-                    if(IsCollection(prop.PropertyType))
+                    if(Types.IsCollection(prop.PropertyType))
                     {
-                        Type elementType = GetElementType(prop.PropertyType);
+                        Type elementType = Types.GetElementType(prop.PropertyType);
                         var tableCols = new List<Column>();
                         var tableFks = new List<ForeignKey>();
 
-                        if (HasAttribute<SharedAttribute>(prop))
+                        if (Types.HasAttribute<SharedAttribute>(prop))
                         {
                             // m:n relathionship
                             // when we have m:n relationships, both types are non primitives
@@ -253,29 +163,29 @@ namespace EzMapper
                             tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType)));
 
                             // create assignment table (id, fk1, fk2)
-                            tableCols.Add(new Column() { Name = $"ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-                            tableCols.Add(new Column() { Name = $"{tableName}ID" }); // reference parent table
-                            tableCols.Add(new Column() { Name = $"{elementType.Name}ID" }); // reference child table
+                            tableCols.Add(new Column($"ID", "PRIMARY KEY"));
+                            tableCols.Add(new Column($"{tableName}ID"));// reference parent table
+                            tableCols.Add(new Column($"{elementType.Name}ID")); // reference child table
 
-                            tableFks.Add(new ForeignKey() { FieldName = $"{tableName}ID", TargetTable = model.GetType().Name, TargetField = primaryKey });
-                            tableFks.Add(new ForeignKey() { FieldName = $"{elementType.Name}ID", TargetTable = elementType.Name, TargetField = GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray()) });
+                            tableFks.Add(new ForeignKey($"{tableName}ID", model.GetType().Name, primaryKey));
+                            tableFks.Add(new ForeignKey($"{elementType.Name}ID", elementType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
 
                             tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
-
+                             
                         }
                         else
                         {
                             // 1:n relationships
                             // check for element type again, recursive call for non primitves
-   
-                            tableCols.Add(new Column() { Name = $"{model.GetType().Name}ID" });
-                            tableFks.Add(new ForeignKey() { FieldName = $"{model.GetType().Name}ID", TargetTable = model.GetType().Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray()) });
 
-                            if (IsPrimitive(elementType))
+                            tableCols.Add(new Column($"{model.GetType().Name}ID"));;
+                            tableFks.Add(new ForeignKey($"{model.GetType().Name}ID", model.GetType().Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray())));
+
+                            if (Types.IsPrimitive(elementType))
                             {
 
-                                tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-                                tableCols.Add(new Column() { Name = prop.Name });
+                                tableCols.Add(new Column("ID", "PRIMARY KEY"));
+                                tableCols.Add(new Column(prop.Name));
 
                                 tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
                             }
@@ -291,22 +201,22 @@ namespace EzMapper
                         // 1:1 relationships
                         tables.AddRange(CreateTableHierarchy(prop.GetValue(model)));
 
-                        columns.Add(new Column() { Name = $"{prop.Name}ID" });
-                        fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
+                        columns.Add(new Column($"{prop.Name}ID"));
+                        fks.Add(new ForeignKey($"{prop.Name}ID", prop.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray())));
                     }
 
                     continue;
                 }
 
-                var col = new Column() { Name = prop.Name};
+                var col = new Column(prop.Name);
                 
-                if(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name))
+                if(Types.HasAttribute<NotNullAttribute>(prop) || !Types.IsNullable(model, prop.Name))
                     col.Constrains.Add("NOT NULL");
 
-                if (HasAttribute<UniqueAttribute>(prop))
+                if (Types.HasAttribute<UniqueAttribute>(prop))
                     col.Constrains.Add("UNIQUE");
 
-                if (HasAttribute<DefaultMemberAttribute>(prop))
+                if (Types.HasAttribute<DefaultValueAttribute>(prop))
                     col.Constrains.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
 
                 columns.Add(col);
@@ -318,46 +228,9 @@ namespace EzMapper
             return tables;
         }
 
-        public static bool HasAttribute<T>(PropertyInfo prop) where T : Attribute
-        {
-            return prop.CustomAttributes.Where(attr => attr.AttributeType.Name == typeof(T).Name).ToArray().Length == 1;
-        }
-
-        public static string GetPrimaryKeyPropertyName(params PropertyInfo[] props)
-        {
-            Assert.NotNull(props, nameof(props));
 
 
-            // validate that primary key attribute is used once at most (0 or 1)
-            var filteredPropsByAttribute = props.Where(prop => HasAttribute<PrimaryKeyAttribute>(prop)).ToList();
 
-            if (filteredPropsByAttribute.Count > 1)
-                throw new Exception($"Primary Key attribute can be used on only one element!");
-
-            string primaryKeyPropertyName = string.Empty;
-
-            //if one attribute is present, this property is the primary key
-            if(filteredPropsByAttribute.Count == 1)
-            {
-                primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
-            }
-            else if(filteredPropsByAttribute.Count == 0) // if no attribute is found, search for default name
-            {
-                var filteredPropsByName = props.Where(prop => prop.Name.ToUpper() == "ID").ToList();
-
-                //no key found
-                if (filteredPropsByName.Count == 0)
-                    throw new Exception($"No candidate for primary key found. No Attribute nor ID Property found");
-
-                primaryKeyPropertyName = filteredPropsByName[0].Name;
-            }
-
-            //check for datatype
-            if (props.Where(prop => prop.Name == primaryKeyPropertyName).First().PropertyType != typeof(int))
-                throw new Exception($"{primaryKeyPropertyName} is not an integer. Primary key should be an integer");
-
-            return primaryKeyPropertyName;
-        }
     }
 
     

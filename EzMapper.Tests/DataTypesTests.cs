@@ -1,4 +1,5 @@
 ﻿using EzMapper.Tests.Models;
+using EzMapper.Reflection;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
@@ -15,18 +16,18 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithDifferentDataTypes();
 
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.i)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.k)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.q)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.u)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.x)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.y)));
-            Assert.IsTrue(EzMapper.IsPrimitive(model, nameof(model.z)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.i)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.k)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.q)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.u)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.x)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.y)));
+            Assert.IsTrue(Types.IsPrimitive(model, nameof(model.z)));
 
-            Assert.IsFalse(EzMapper.IsPrimitive(model, nameof(model.l)));
-            Assert.IsFalse(EzMapper.IsPrimitive(model, nameof(model.o)));
-            Assert.IsFalse(EzMapper.IsPrimitive(model, nameof(model.o2)));
-            Assert.IsFalse(EzMapper.IsPrimitive(model, nameof(model.obj)));
+            Assert.IsFalse(Types.IsPrimitive(model, nameof(model.l)));
+            Assert.IsFalse(Types.IsPrimitive(model, nameof(model.o)));
+            Assert.IsFalse(Types.IsPrimitive(model, nameof(model.o2)));
+            Assert.IsFalse(Types.IsPrimitive(model, nameof(model.obj)));
         }
 
         [Test]
@@ -34,34 +35,34 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithDifferentDataTypes();
 
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.i)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.k)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.l)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.o)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.o2)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.u)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.y)));
-            Assert.IsTrue(EzMapper.IsNullable(model, nameof(model.obj)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.i)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.k)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.l)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.o)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.o2)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.u)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.y)));
+            Assert.IsTrue(Types.IsNullable(model, nameof(model.obj)));
 
-            Assert.IsFalse(EzMapper.IsNullable(model, nameof(model.z)));
-            Assert.IsFalse(EzMapper.IsNullable(model, nameof(model.x)));
-            Assert.IsFalse(EzMapper.IsNullable(model, nameof(model.q)));
+            Assert.IsFalse(Types.IsNullable(model, nameof(model.z)));
+            Assert.IsFalse(Types.IsNullable(model, nameof(model.x)));
+            Assert.IsFalse(Types.IsNullable(model, nameof(model.q)));
         }
 
         [Test]
         public void Check_For_Collections()
         {
 
-            Assert.IsTrue(EzMapper.IsCollection(typeof(int[])));
-            Assert.IsTrue(EzMapper.IsCollection(typeof(string[])));
-            Assert.IsTrue(EzMapper.IsCollection(typeof(List<string>)));
-            Assert.IsTrue(EzMapper.IsCollection(typeof(List<int>)));
-            Assert.IsTrue(EzMapper.IsCollection(typeof(List<ModelWithDifferentDataTypes>)));
-            Assert.IsTrue(EzMapper.IsCollection(typeof(List<ModelWithNoPrimaryKey>)));
+            Assert.IsTrue(Types.IsCollection(typeof(int[])));
+            Assert.IsTrue(Types.IsCollection(typeof(string[])));
+            Assert.IsTrue(Types.IsCollection(typeof(List<string>)));
+            Assert.IsTrue(Types.IsCollection(typeof(List<int>)));
+            Assert.IsTrue(Types.IsCollection(typeof(List<ModelWithDifferentDataTypes>)));
+            Assert.IsTrue(Types.IsCollection(typeof(List<ModelWithNoPrimaryKey>)));
 
-            Assert.IsFalse(EzMapper.IsCollection(typeof(string)));
-            Assert.IsFalse(EzMapper.IsCollection(typeof(Dictionary<int, string>)));
-            Assert.IsFalse(EzMapper.IsCollection(typeof(Dictionary<string, ModelWithNoPrimaryKey>)));
+            Assert.IsFalse(Types.IsCollection(typeof(string)));
+            Assert.IsFalse(Types.IsCollection(typeof(Dictionary<int, string>)));
+            Assert.IsFalse(Types.IsCollection(typeof(Dictionary<string, ModelWithNoPrimaryKey>)));
         }
          
     }
