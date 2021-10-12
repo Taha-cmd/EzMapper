@@ -1,4 +1,5 @@
-﻿using System;
+﻿using EzMapper.Attributes;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -58,7 +59,7 @@ namespace EzMapper.Reflection
 
             if (prop.PropertyType == typeof(string))
             {
-                if (HasAttribute<NotNullAttribute>(prop))
+                if (HasAttribute<Attributes.NotNullAttribute>(prop))
                     return false;
             }
 
@@ -125,9 +126,24 @@ namespace EzMapper.Reflection
             return (IEnumerable<object>)collectionTypeProp.GetValue(model);
         }
 
+        public static bool IsCollectionOfTypeShared(object model, Type type)
+        {
+            if (!HasCollectionOfType(model, type))
+                throw new Exception($"object of type {model} does not have a collection of type {type}");
+
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
+            var collectionTypeProp = props.Where(prop => IsCollection(prop.PropertyType)).Where(prop => GetElementType(prop.PropertyType) == type).First();
+
+            return HasAttribute<SharedAttribute>(collectionTypeProp);
+        }
+
         public static IEnumerable<object> FlattenNestedObjects(object model)
         {
             List<object> models = new();
+
+            if (model is null)
+                return models;
+
             var props = model.GetType().GetProperties();
 
             foreach(var prop in props)

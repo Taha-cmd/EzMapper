@@ -37,7 +37,12 @@ namespace EzMapper.ConsoleApp
                 Phone = new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea" } } },
             };
 
-            Person teacher = new Teacher()
+            var c1 = new Course() { ID = 1, Name = "Math" };
+            var c2 = new Course() { ID = 2, Name = "Programming" };
+            var c3 = new Course() { ID = 3, Name = "Physics" };
+
+
+            Person teacher1 = new Teacher()
             {
                 ID = 2,
                 Age = 42,
@@ -47,15 +52,25 @@ namespace EzMapper.ConsoleApp
                 Hobbies = new string[] {"Reading", "Watching TV", "Swimming"},
                 Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
                 WorkingYears = 15,
-                Courses = new List<Course>()
-                         {
-                             new Course(){ ID = 1, Name = "Math"},
-                             new Course(){ ID = 2, Name = "Programming"}
-                         }
+                Courses = new List<Course>() { c1, c2}
+            };
+
+            Person teacher2 = new Teacher()
+            {
+                ID = 3,
+                Age = 46,
+                Car = null,
+                FirstName = "Jack",
+                LastName = "Doe",
+                Hobbies = new string[] { "Reading" },
+                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                WorkingYears = 5,
+                Courses = new List<Course>() {  c2, c3 }
             };
 
             EzMapper.Save(student);
-            EzMapper.Save(teacher);
+            EzMapper.Save(teacher1);
+            EzMapper.Save(teacher2);
 
 
 

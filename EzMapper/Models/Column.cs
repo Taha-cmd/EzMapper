@@ -18,6 +18,7 @@ namespace EzMapper.Models
             IsForeignKey = isForeignKey;
         }
 
+        public bool Ignored { get; set; } = false;
         public bool IsForeignKey { get; set; } = false;
         public bool IsPrimaryKey => Constrains.Contains("PRIMARY KEY");
         public string Name { get; set; }

@@ -145,71 +145,20 @@ namespace EzMapper
             if (!_types.Contains(model.GetType()))
                 throw new Exception($"object of type {model} is not registered");
 
-            IEnumerable<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First()));
-            IEnumerable<object> models = Types.FlattenNestedObjects(model); // retrieve all nested objects and flatten the heirarchy (only for 1:1 relationships)
+            List<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First())).ToList();
             List<InsertStatement> insertStatements = new();
 
-
-            //TODO: m:n
-            //TODO: multilevel nested objects?
-
-            foreach (Table table in tables)
-            {
-                if(table.Type is not null)
-                {
-                    if (table.Type.IsAssignableFrom(model.GetType()) && table.Type != model.GetType()) // parent model
-                    {
-                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, Types.ConvertToParentModel(model)));
-                    }
-                    else if(table.Type == model.GetType()) // the model 
-                    {
-                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, model));
-                    }
-                    else if(Types.HasCollectionOfType(model, table.Type)) // a collection of objects
-                    {
-                        // TODO: differ between 1:n and m:n relationships
-                        IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
-                        foreach (var obj in collection)
-                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
-                    }
-                    else if(table.Type == typeof(PrimitivesChildTable)) // a collection of primitives (1:n)
-                    {
-                        var targetCollectionPropertyName = table.Columns.Where(col => !col.IsForeignKey && !col.IsPrimaryKey).First().Name;
-                        IList collection = (IList)model.GetType().GetProperty(targetCollectionPropertyName).GetValue(model);
-
-                        table.Columns.Remove(table.Columns.Where(col => col.IsPrimaryKey).First());
-
-
-                        foreach (var primitve in collection)
-                        {
-                            var obj = new ExpandoObject() as IDictionary<string, object>;
-                            obj.Add(targetCollectionPropertyName, primitve);
-                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
-                        }   
-                    }
-                    else // object (1:1)
-                    {
-                        //TODO: handle nested objects
-                        var objects = models.Where(m => m.GetType().Name == table.Name); 
-                                    
-                        foreach(object obj in objects)
-                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
-                    }         
-                }
-                else
-                {
-                    Console.WriteLine(table.Name);
-                }
-            }
+            tables.ForEach(table => insertStatements.AddRange(StatementBuilder.TableToInsertStatements(table, model, tables.ToArray())));
 
             foreach (InsertStatement stmt in insertStatements)
             {
                 List<DbParameter> paras = new();
 
+                //TODO: remove columns of null values
                 foreach(Column col in stmt.Table.Columns)
                 {
-                    
-                    if(col.IsForeignKey)
+
+                    if (col.IsForeignKey && stmt.Table.Type != typeof(ManyToManyAssignmentTable))
                     {
                         
                         var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First(); // find the foriegn key
@@ -229,12 +178,21 @@ namespace EzMapper
                             obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model; // find the correct object
                         }
                          
-                        var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
+                        if(obj is not null)
+                        {
+                            var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
+                            
+                            paras.Add(_db.Param(col.Name, value));
+                        }
+                        else
+                        {
+                            col.Ignored = true;
+                        }
 
-                        paras.Add(_db.Param(col.Name, value));
                     }
                     else
                     {
+                        
                         if(stmt.Model is ExpandoObject @object)
                         {
                             paras.Add(_db.Param(col.Name, @object.Where(el => el.Key == col.Name).First().Value));
@@ -337,7 +295,7 @@ namespace EzMapper
                             tableFks.Add(new ForeignKey($"{tableName}ID", model.GetType().Name, primaryKey));
                             tableFks.Add(new ForeignKey($"{elementType.Name}ID", elementType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
 
-                            tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
+                            tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}", typeof(ManyToManyAssignmentTable)));
                              
                         }
                         else

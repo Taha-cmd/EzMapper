@@ -35,13 +35,18 @@ namespace EzMapper.Database
 
         public static string CreateInsertStatement(InsertStatement insertStatement)
         {
-            var builder = new StringBuilder($"INSERT INTO {insertStatement.Table.Name} (");
+            var builder = new StringBuilder();
 
-            insertStatement.Table.Columns.ForEach(col => builder.Append(col.Name + ","));
+            if (insertStatement.Table.Type == typeof(ManyToManyAssignmentTable))
+                builder.Append($"INSERT INTO {insertStatement.Table.Name} (");
+            else
+                builder.Append($"INSERT OR REPLACE INTO {insertStatement.Table.Name} (");
+
+            insertStatement.Table.Columns.Where(col => !col.Ignored).ToList().ForEach(col => builder.Append(col.Name + ","));
             builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
             builder.Append(") VALUES (");
 
-            insertStatement.Table.Columns.ForEach(col => builder.Append($"@{col.Name},"));
+            insertStatement.Table.Columns.Where(col => !col.Ignored).ToList().ForEach(col => builder.Append($"@{col.Name},"));
             builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
             builder.Append(");");
 
