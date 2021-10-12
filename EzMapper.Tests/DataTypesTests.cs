@@ -79,5 +79,12 @@ namespace EzMapper.Tests
             Assert.IsFalse(Types.HasCollectionOfPrimitives(new ModelWithNoPrimaryKey()));
         }
 
+        [Test]
+        public void Test_Child_Type_Checking()
+        {
+            Assert.IsTrue(Types.HasObjectOfType(new ModelWithDifferentDataTypes(), typeof(string)));
+            Assert.IsFalse(Types.HasObjectOfType(new ModelWithDifferentDataTypes(), typeof(ModelWithNoAttribute)));
+        }
+
     }
 }

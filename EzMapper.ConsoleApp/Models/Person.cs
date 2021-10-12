@@ -12,6 +12,7 @@ namespace EzMapper.ConsoleApp.Models
         [PrimaryKey]
         public int ID { get; set; }
 
+        public string[] Hobbies { get; set; } 
         public List<int> Numbers {get; set;} = new();
 
         [Unique]

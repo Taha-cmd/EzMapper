@@ -52,10 +52,11 @@ namespace EzMapper
             //List<string> createTableStatements = new();
 
             _types.ForEach(type => tables.AddRange(CreateTables(type)));
-            //tables = SortTablesForCreation(tables).ToList();
+            tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList(); // get rid of duplicate tables
 
             foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
+                Console.WriteLine(statement);
                 _db.ExecuteNonQuery(statement);
             }
 
@@ -144,7 +145,8 @@ namespace EzMapper
             if (!_types.Contains(model.GetType()))
                 throw new Exception($"object of type {model} is not registered");
 
-            IEnumerable<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()));
+            IEnumerable<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First()));
+            IEnumerable<object> models = Types.FlattenNestedObjects(model); // retrieve all nested objects and flatten the heirarchy (only for 1:1 relationships)
             List<InsertStatement> insertStatements = new();
 
 
@@ -187,7 +189,11 @@ namespace EzMapper
                     }
                     else // object (1:1)
                     {
-                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, model.GetType().GetProperty(table.Name).GetValue(model)));
+                        //TODO: handle nested objects
+                        var objects = models.Where(m => m.GetType().Name == table.Name); 
+                                    
+                        foreach(object obj in objects)
+                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
                     }         
                 }
                 else
@@ -205,9 +211,24 @@ namespace EzMapper
                     
                     if(col.IsForeignKey)
                     {
-                        var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First();
-                        var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
-                        var obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model;
+                        
+                        var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First(); // find the foriegn key
+                        var targetTable = tables.Where(t => t.Name == fk.TargetTable).First(); // find the target table
+
+                        object obj;
+                        if (Types.HasObjectOfType(stmt.Model, targetTable.Type)) // if the object contains the nested object, find the nested object from the current object
+                        {
+                            // we can deduce the field name based on the foreign key, since foreign keys are created based on conventions and the use cannot influence it
+                            // for example: if the object Laptop has a reference to a property called CPU, then the foreign key will be called CPUID
+                            // thus, a foreign key of the name CarId for example refers to a property called Car
+                            string propertyName = col.Name.Replace("ID", "");
+                            obj = stmt.Model.GetType().GetProperty(propertyName).GetValue(stmt.Model);
+                        }
+                        else
+                        {
+                            obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model; // find the correct object
+                        }
+                         
                         var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
 
                         paras.Add(_db.Param(col.Name, value));
@@ -345,10 +366,10 @@ namespace EzMapper
                     else
                     {
                         // 1:1 relationships
-                        tables.AddRange(GetTableHierarchy(prop.GetValue(model)));
+                        tables.AddRange(CreateTables(prop.PropertyType));
 
                         columns.Add(new Column($"{prop.Name}ID", true));
-                        fks.Add(new ForeignKey($"{prop.Name}ID", prop.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray())));
+                        fks.Add(new ForeignKey($"{prop.Name}ID", prop.PropertyType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties().ToArray())));
                     }
 
                     continue;

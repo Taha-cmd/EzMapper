@@ -125,6 +125,32 @@ namespace EzMapper.Reflection
             return (IEnumerable<object>)collectionTypeProp.GetValue(model);
         }
 
+        public static IEnumerable<object> FlattenNestedObjects(object model)
+        {
+            List<object> models = new();
+            var props = model.GetType().GetProperties();
+
+            foreach(var prop in props)
+            {
+                if(!IsPrimitive(prop.PropertyType) && !IsCollection(prop.PropertyType))
+                {
+                    models.Add(prop.GetValue(model));
+                    models.AddRange(FlattenNestedObjects(prop.GetValue(model)));
+                }
+            }
+
+            if (HasParentModel(model))
+                models.Add(ConvertToParentModel(model));
+
+            return models;
+        }
+
+        public static bool HasObjectOfType(object parent, Type child)
+        {
+            var props = parent.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
+            return props.Any(prop => prop.PropertyType == child);
+        }
+
         //public static IEnumerable<object> GetCollectionOfPropertyName
 
     }

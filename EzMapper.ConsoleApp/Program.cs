@@ -26,14 +26,15 @@ namespace EzMapper.ConsoleApp
                 LastName = "Doe",
                 School = "TU Wien",
                 Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                Hobbies = new string[] { "Reading", "Skating", "Gaming" },
                 Books = new List<Book>
                        {
                            new Book(){ ID = 1, Title = "learn C"},
                            new Book(){ ID = 2, Title = "Animal Farm"}
                        },
                 Car = new Car() { ModelNumber = 3, Brand = "Volvo" },
-                Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = "Intel" },
-                Phone = new Phone() { ID = 1, Brand = "Samsung" }
+                Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = new Cpu() { ID = 1, Brand = "Intel", Alu = new AluUnit() { ID = 2, PlaceHolder = "out of ideas" } } },
+                Phone = new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea" } } },
             };
 
             Person teacher = new Teacher()
@@ -43,6 +44,7 @@ namespace EzMapper.ConsoleApp
                 Car = new Car() { ModelNumber = 2, Brand = "BMW" },
                 FirstName = "Jane",
                 LastName = "Doe",
+                Hobbies = new string[] {"Reading", "Watching TV", "Swimming"},
                 Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
                 WorkingYears = 15,
                 Courses = new List<Course>()

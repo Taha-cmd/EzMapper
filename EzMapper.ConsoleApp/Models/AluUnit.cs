@@ -6,10 +6,9 @@ using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp.Models
 {
-    public class Laptop
+    public class AluUnit
     {
         public int ID { get; set; }
-        public string Brand { get; set; }
-        public Cpu CPU { get; set; } = new Cpu();
+        public string PlaceHolder { get; set; }
     }
 }
