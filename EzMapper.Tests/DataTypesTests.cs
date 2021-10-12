@@ -64,6 +64,20 @@ namespace EzMapper.Tests
             Assert.IsFalse(Types.IsCollection(typeof(Dictionary<int, string>)));
             Assert.IsFalse(Types.IsCollection(typeof(Dictionary<string, ModelWithNoPrimaryKey>)));
         }
-         
+
+        [Test]
+        public void Test_Collections_Of_Objects_Check()
+        {
+            Assert.IsTrue(Types.HasCollectionOfType(new ModelWithDifferentDataTypes(), typeof(ModelWithNoAttribute)));
+            Assert.IsFalse(Types.HasCollectionOfType(new ModelWithDifferentDataTypes(), typeof(ModelWithNoPrimaryKey)));
+        }
+
+        [Test]
+        public void Test_Collections_Of_Primitives_Check()
+        {
+            Assert.IsTrue(Types.HasCollectionOfPrimitives(new ModelWithDifferentDataTypes()));
+            Assert.IsFalse(Types.HasCollectionOfPrimitives(new ModelWithNoPrimaryKey()));
+        }
+
     }
 }

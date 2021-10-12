@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace EzMapper.Database
 {
-    class StatementBuilder
+    class SqlStatementBuilder
     {
         public static IEnumerable<string> CreateCreateStatements(IEnumerable<Table> tables)
         {
@@ -31,6 +31,21 @@ namespace EzMapper.Database
             }
 
             return builder.ToString().Split(";");
+        }
+
+        public static string CreateInsertStatement(InsertStatement insertStatement)
+        {
+            var builder = new StringBuilder($"INSERT INTO {insertStatement.Table.Name} (");
+
+            insertStatement.Table.Columns.ForEach(col => builder.Append(col.Name + ","));
+            builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
+            builder.Append(") VALUES (");
+
+            insertStatement.Table.Columns.ForEach(col => builder.Append($"@{col.Name},"));
+            builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
+            builder.Append(");");
+
+            return builder.ToString();
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
@@ -11,6 +12,11 @@ namespace EzMapper.Reflection
         public static bool HasParentModel(object model)
         {
             return model.GetType().BaseType.FullName != typeof(object).FullName;
+        }
+
+        public static bool HasParentModel(Type t)
+        {
+            return HasParentModel(Activator.CreateInstance(t));
         }
 
         public static bool IsPrimitive(Type t)
@@ -76,5 +82,50 @@ namespace EzMapper.Reflection
         {
             return prop.CustomAttributes.Where(attr => attr.AttributeType.Name == typeof(T).Name).ToArray().Length == 1;
         }
+
+        public static object ConvertToParentModel(object model)
+        {
+            if (!HasParentModel(model))
+                throw new Exception($"Object of type {model} is not a derived type");
+
+            object parent = Activator.CreateInstance(model.GetType().BaseType);
+
+            foreach(var prop in parent.GetType().GetProperties())
+            {
+                prop.SetValue(parent, prop.GetValue(model));
+            }
+
+            return parent;
+        }
+
+        public static bool HasCollectionOfType(object model, Type type)
+        {
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
+            var collectionTypeProps = props.Where(prop => IsCollection(prop.PropertyType)).Where(prop => GetElementType(prop.PropertyType) == type);
+
+            return collectionTypeProps.ToList().Count >= 1;
+        }
+
+        public static bool HasCollectionOfPrimitives(object model)
+        {
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
+            var collectionTypeProps = props.Where(prop => IsCollection(prop.PropertyType)).Where(prop => IsPrimitive(GetElementType(prop.PropertyType)));
+
+            return collectionTypeProps.ToList().Count >= 1;
+        }
+
+        public static IEnumerable<object> GetCollectionOfType(object model, Type type)
+        {
+            if (!HasCollectionOfType(model, type))
+                throw new Exception($"object of type {model} does not have a collection of type {type}");
+
+            var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
+            var collectionTypeProp = props.Where(prop => IsCollection(prop.PropertyType)).Where(prop => GetElementType(prop.PropertyType) == type).First();
+
+            return (IEnumerable<object>)collectionTypeProp.GetValue(model);
+        }
+
+        //public static IEnumerable<object> GetCollectionOfPropertyName
+
     }
 }

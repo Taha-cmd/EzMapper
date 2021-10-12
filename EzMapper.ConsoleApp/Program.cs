@@ -18,6 +18,43 @@ namespace EzMapper.ConsoleApp
             EzMapper.Register<Teacher>();
             EzMapper.Build();
 
+            Person student = new Student()
+            {
+                ID = 1,
+                Age = 23,
+                FirstName = "John",
+                LastName = "Doe",
+                School = "TU Wien",
+                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                Books = new List<Book>
+                       {
+                           new Book(){ ID = 1, Title = "learn C"},
+                           new Book(){ ID = 2, Title = "Animal Farm"}
+                       },
+                Car = new Car() { ModelNumber = 3, Brand = "Volvo" },
+                Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = "Intel" },
+                Phone = new Phone() { ID = 1, Brand = "Samsung" }
+            };
+
+            Person teacher = new Teacher()
+            {
+                ID = 2,
+                Age = 42,
+                Car = new Car() { ModelNumber = 2, Brand = "BMW" },
+                FirstName = "Jane",
+                LastName = "Doe",
+                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                WorkingYears = 15,
+                Courses = new List<Course>()
+                         {
+                             new Course(){ ID = 1, Name = "Math"},
+                             new Course(){ ID = 2, Name = "Programming"}
+                         }
+            };
+
+            EzMapper.Save(student);
+            EzMapper.Save(teacher);
+
 
 
 

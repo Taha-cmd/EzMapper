@@ -8,6 +8,10 @@ using System.Linq;
 using System.Reflection;
 using EzMapper.Reflection;
 using System.Text;
+using System.IO;
+using System.Data.SQLite;
+using System.Data.Common;
+using System.Dynamic;
 
 namespace EzMapper
 {
@@ -15,7 +19,16 @@ namespace EzMapper
     {
 
         private static readonly List<Type> _types = new();
-        private static bool _isBuilt = false;
+        private static bool _isBuilt = File.Exists(Default.DbName);
+        private static IDatebase _db;
+
+        static EzMapper()
+        {
+#if DEBUG
+            File.Delete(Default.DbName);
+#endif
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
+        }
         private EzMapper() { }
         public static void Register<T>() where T : class
         {
@@ -27,54 +40,68 @@ namespace EzMapper
 
         public static void Build()
         {
+            
+
             if (_isBuilt) return;
+
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
+            SQLiteConnection.CreateFile(Default.DbName);
+            
 
             List<Table> tables = new();
             //List<string> createTableStatements = new();
 
             _types.ForEach(type => tables.AddRange(CreateTables(type)));
+            //tables = SortTablesForCreation(tables).ToList();
 
-            // in case the user registers a model that is contained in a list within another model,
-            // then this model will be created twice (the second time being when the parent model is registered)
-            // and the foreign key will not be set correctly
-            // this is why we group tables by name (models that were registered more than once)
-            // and take the one with the most columns (the correct one with the foreign key)
-            tables = tables
-                        .GroupBy(table => table.Name)
-                        .Select(g => g.OrderByDescending(table => table.Columns.Count))
-                        .Select(g => g.First())
-                        .OrderByDescending(table => table.ForeignKeys.Count == 0)
-                        .ToList(); //https://stackoverflow.com/questions/489258/linqs-distinct-on-a-particular-property
-
-
-            // the last step will ruin the order and cause tables with foreign keys to come before their parent tables
-            // take each table, and find all other tables that reference it (basically find all child tables to a parent table)
-            // and append them to the list
-            var tmp = new List<Table>();
-            foreach (var table in tables)
+            foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
-                tmp.AddRange(
-                    tables.Where(
-                        t => t.ForeignKeys.Where(fk => fk.TargetTable == table.Name).Count() > 0
-                    )
-                );
-            }
-
-            tables.AddRange(tmp);
-
-            // now we have duplicates, the tables at the end are the correct ones
-            tables.Reverse();
-            tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList();
-            tables.Reverse();
-
-
-            foreach (string statement in StatementBuilder.CreateCreateStatements(tables))
-            {
-                Console.WriteLine(statement);
+                _db.ExecuteNonQuery(statement);
             }
 
             _isBuilt = true;
         }
+
+
+        // not needed?
+
+        //private static IEnumerable<Table> SortTablesForCreation(IEnumerable<Table> tables)
+        //{
+        //    // in case the user registers a model that is contained in a list within another model,
+        //    // then this model will be created twice (the second time being when the parent model is registered)
+        //    // and the foreign key will not be set correctly
+        //    // this is why we group tables by name (models that were registered more than once)
+        //    // and take the one with the most columns (the correct one with the foreign key)
+        //    tables = tables
+        //                .GroupBy(table => table.Name)
+        //                .Select(g => g.OrderByDescending(table => table.Columns.Count))
+        //                .Select(g => g.First())
+        //                .OrderByDescending(table => table.ForeignKeys.Count == 0)
+        //                .ToList(); //https://stackoverflow.com/questions/489258/linqs-distinct-on-a-particular-property
+
+
+        //    // the last step will ruin the order and cause tables with foreign keys to come before their parent tables
+        //    // take each table, and find all other tables that reference it (basically find all child tables to a parent table)
+        //    // and append them to the list
+        //    var tmp = new List<Table>();
+        //    foreach (var table in tables)
+        //    {
+        //        tmp.AddRange(
+        //            tables.Where(
+        //                t => t.ForeignKeys.Where(fk => fk.TargetTable == table.Name).Count() > 0
+        //            )
+        //        );
+        //    }
+
+        //    tables = tables.Concat(tmp);
+
+        //    // now we have duplicates, the tables at the end are the correct ones
+        //    tables.Reverse();
+        //    tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList();
+        //    tables.Reverse();
+
+        //    return tables;
+        //}
 
         public static void TestCrud(object model)
         {
@@ -108,11 +135,126 @@ namespace EzMapper
 
         }
 
+
+        public static void Save(object model)
+        {
+            if (!_isBuilt)
+                throw new Exception("You can't save objects yet, the database has not been built");
+
+            if (!_types.Contains(model.GetType()))
+                throw new Exception($"object of type {model} is not registered");
+
+            IEnumerable<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()));
+            List<InsertStatement> insertStatements = new();
+
+
+            //TODO: m:n
+            //TODO: multilevel nested objects?
+
+            foreach (Table table in tables)
+            {
+                if(table.Type is not null)
+                {
+                    if (table.Type.IsAssignableFrom(model.GetType()) && table.Type != model.GetType()) // parent model
+                    {
+                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, Types.ConvertToParentModel(model)));
+                    }
+                    else if(table.Type == model.GetType()) // the model 
+                    {
+                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, model));
+                    }
+                    else if(Types.HasCollectionOfType(model, table.Type)) // a collection of objects
+                    {
+                        // TODO: differ between 1:n and m:n relationships
+                        IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
+                        foreach (var obj in collection)
+                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
+                    }
+                    else if(table.Type == typeof(PrimitivesChildTable)) // a collection of primitives (1:n)
+                    {
+                        var targetCollectionPropertyName = table.Columns.Where(col => !col.IsForeignKey && !col.IsPrimaryKey).First().Name;
+                        IList collection = (IList)model.GetType().GetProperty(targetCollectionPropertyName).GetValue(model);
+
+                        table.Columns.Remove(table.Columns.Where(col => col.IsPrimaryKey).First());
+
+
+                        foreach (var primitve in collection)
+                        {
+                            var obj = new ExpandoObject() as IDictionary<string, object>;
+                            obj.Add(targetCollectionPropertyName, primitve);
+                            insertStatements.Add(StatementBuilder.CreateInsertStatement(table, obj));
+                        }   
+                    }
+                    else // object (1:1)
+                    {
+                        insertStatements.Add(StatementBuilder.CreateInsertStatement(table, model.GetType().GetProperty(table.Name).GetValue(model)));
+                    }         
+                }
+                else
+                {
+                    Console.WriteLine(table.Name);
+                }
+            }
+
+            foreach (InsertStatement stmt in insertStatements)
+            {
+                List<DbParameter> paras = new();
+
+                foreach(Column col in stmt.Table.Columns)
+                {
+                    
+                    if(col.IsForeignKey)
+                    {
+                        var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First();
+                        var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
+                        var obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model;
+                        var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
+
+                        paras.Add(_db.Param(col.Name, value));
+                    }
+                    else
+                    {
+                        if(stmt.Model is ExpandoObject @object)
+                        {
+                            paras.Add(_db.Param(col.Name, @object.Where(el => el.Key == col.Name).First().Value));
+                        }
+                        else
+                        {
+                            paras.Add(_db.Param(col.Name, stmt.Table.Type.GetProperty(col.Name).GetValue(stmt.Model)));
+
+                        }
+                    }
+                    
+                }
+                _db.ExecuteNonQuery(SqlStatementBuilder.CreateInsertStatement(stmt), paras.ToArray());
+            }
+        }
+
+        private static IEnumerable<Table> SortTablesByForeignKeys(IEnumerable<Table> tables)
+        {
+            List<Table> results = new();
+
+            foreach (Table table in tables)
+            {
+                foreach (Column column in table.Columns)
+                {
+                    if (column.IsForeignKey)
+                        results.AddRange(SortTablesByForeignKeys(tables.Where(t => t.Name == table.ForeignKeys.Where(fk => fk.FieldName == column.Name).First().TargetTable)));
+                }
+
+                results.Add(table);
+            }
+
+            return results.GroupBy(t => t.Name).Select(g => g.First());
+
+        }
+
+
         private static IEnumerable<Table> CreateTables(Type type)
         {
-            return CreateTableHierarchy(Activator.CreateInstance(type));
+            return GetTableHierarchy(Activator.CreateInstance(type));
         }
-        private static IEnumerable<Table> CreateTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null)
+        private static IEnumerable<Table> GetTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null, Type type = null)
         {
             List<Table> tables = new();
             string primaryKey = string.Empty;
@@ -121,15 +263,18 @@ namespace EzMapper
 
             var fks = foreignKeys is null ? new List<ForeignKey>() : foreignKeys;
             var columns = cols is null ? new List<Column>() : cols;
-
+            
             if (model is null)
                 goto TableBulding;
 
+            type ??= model.GetType();
+
             if (Types.HasParentModel(model))
             {
-                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(model.GetType().BaseType)));
+                tables.AddRange(GetTableHierarchy(Activator.CreateInstance(model.GetType().BaseType)));
             }
 
+            bool fk = false;
             if (!Types.HasParentModel(model))
             {
                 primaryKey = SqlTypeInspector.GetPrimaryKeyPropertyName(props.ToArray());
@@ -138,9 +283,10 @@ namespace EzMapper
             {
                 primaryKey = model.GetType().BaseType.Name + "ID";
                 fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray())));
+                fk = true;
             }
 
-            columns.Add(new Column(primaryKey, "PRIMARY KEY"));
+            columns.Add(new Column(primaryKey, "PRIMARY KEY") { IsForeignKey = fk});
 
             foreach(var prop in props?.Where(prop => prop.Name != primaryKey))
             {
@@ -160,17 +306,17 @@ namespace EzMapper
                             // when we have m:n relationships, both types are non primitives
 
                             // create table for the new object
-                            tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType)));
+                            tables.AddRange(GetTableHierarchy(Activator.CreateInstance(elementType)));
 
                             // create assignment table (id, fk1, fk2)
                             tableCols.Add(new Column($"ID", "PRIMARY KEY"));
-                            tableCols.Add(new Column($"{tableName}ID"));// reference parent table
-                            tableCols.Add(new Column($"{elementType.Name}ID")); // reference child table
+                            tableCols.Add(new Column($"{tableName}ID", true));// reference parent table
+                            tableCols.Add(new Column($"{elementType.Name}ID", true)); // reference child table
 
                             tableFks.Add(new ForeignKey($"{tableName}ID", model.GetType().Name, primaryKey));
                             tableFks.Add(new ForeignKey($"{elementType.Name}ID", elementType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
 
-                            tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
+                            tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
                              
                         }
                         else
@@ -178,7 +324,7 @@ namespace EzMapper
                             // 1:n relationships
                             // check for element type again, recursive call for non primitves
 
-                            tableCols.Add(new Column($"{model.GetType().Name}ID"));;
+                            tableCols.Add(new Column($"{model.GetType().Name}ID", true));;
                             tableFks.Add(new ForeignKey($"{model.GetType().Name}ID", model.GetType().Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray())));
 
                             if (Types.IsPrimitive(elementType))
@@ -187,11 +333,11 @@ namespace EzMapper
                                 tableCols.Add(new Column("ID", "PRIMARY KEY"));
                                 tableCols.Add(new Column(prop.Name));
 
-                                tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                                tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name, typeof(PrimitivesChildTable)));
                             }
                             else
                             {
-                                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
+                                tables.AddRange(GetTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
                             }
                         }
 
@@ -199,9 +345,9 @@ namespace EzMapper
                     else
                     {
                         // 1:1 relationships
-                        tables.AddRange(CreateTableHierarchy(prop.GetValue(model)));
+                        tables.AddRange(GetTableHierarchy(prop.GetValue(model)));
 
-                        columns.Add(new Column($"{prop.Name}ID"));
+                        columns.Add(new Column($"{prop.Name}ID", true));
                         fks.Add(new ForeignKey($"{prop.Name}ID", prop.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray())));
                     }
 
@@ -223,7 +369,8 @@ namespace EzMapper
             }
 
         TableBulding:
-            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks });
+            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks, Type = type });
+
 
             return tables;
         }
