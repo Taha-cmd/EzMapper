@@ -153,6 +153,20 @@ namespace EzMapper.Reflection
                     models.Add(prop.GetValue(model));
                     models.AddRange(FlattenNestedObjects(prop.GetValue(model)));
                 }
+
+                if(IsCollection(prop.PropertyType))
+                {
+                    if(!IsPrimitive(GetElementType(prop.PropertyType)))
+                    {
+                        IList collection = (IList)prop.GetValue(model);
+                        foreach (var nestedObject in collection)
+                        {
+                            models.Add(nestedObject);
+                            models.AddRange(FlattenNestedObjects(nestedObject));
+                        }
+                            
+                    }
+                }
             }
 
             if (HasParentModel(model))

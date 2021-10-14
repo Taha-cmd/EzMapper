@@ -154,7 +154,6 @@ namespace EzMapper
             {
                 List<DbParameter> paras = new();
 
-                //TODO: remove columns of null values
                 foreach(Column col in stmt.Table.Columns)
                 {
 

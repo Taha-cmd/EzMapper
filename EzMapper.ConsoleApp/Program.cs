@@ -34,7 +34,11 @@ namespace EzMapper.ConsoleApp
                        },
                 Car = new Car() { ModelNumber = 3, Brand = "Volvo" },
                 Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = new Cpu() { ID = 1, Brand = "Intel", Alu = new AluUnit() { ID = 2, PlaceHolder = "out of ideas" } } },
-                Phone = new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea" } } },
+                Phones = new List<Phone>()
+                {
+                    new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea" } } },
+                    new Phone() { ID = 2, Brand = "IPhone", CPU = new Cpu() { ID = 3, Brand = "apple fancy processor", Alu = new AluUnit() { ID = 3, PlaceHolder = "really no idea" } } },
+                }
             };
 
             var c1 = new Course() { ID = 1, Name = "Math" };

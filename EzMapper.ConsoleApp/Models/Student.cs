@@ -11,7 +11,7 @@ namespace EzMapper.ConsoleApp.Models
     {
         public string School { get; set; }
 
-        public Phone Phone { get; set; } = new Phone() { ID = 3,Brand = "Nokia" };
+        public List<Phone> Phones { get; set; }
         public Laptop Laptop { get; set; }
         public List<Book> Books { get; set; } = new();
 

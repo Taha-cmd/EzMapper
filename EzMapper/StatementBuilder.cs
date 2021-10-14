@@ -28,6 +28,7 @@ namespace EzMapper
 
         public static IEnumerable<InsertStatement> TableToInsertStatements(Table table, object model, Table[] tables)
         {
+            //TODO: set replaceable flag for shareable objects
             IEnumerable<object> models = Types.FlattenNestedObjects(model); // retrieve all nested objects and flatten the heirarchy (only for 1:1 relationships)
             var insertStatements = new List<InsertStatement>();
 
@@ -45,12 +46,16 @@ namespace EzMapper
                 {
                     // this will add the entier collection  1:n
                     IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
+                    List<InsertStatement> tmpStatements = new();
                     foreach (var obj in collection)
-                        insertStatements.Add(CreateInsertStatement(table, obj));
+                        tmpStatements.Add(CreateInsertStatement(table, obj));
 
                     // deal with m:n here
                     if(Types.IsCollectionOfTypeShared(model, table.Type))
                     {
+                        //if the collection is shared, we assume that we might insert duplicates, so set the replaceable flag
+                        tmpStatements.ForEach(stmt => stmt.Replaceable = true);
+
                         // find table
                         Table assignmentTable = tables.Where(t => t.Name == $"{model.GetType().Name}_{table.Name}").First();
 
@@ -89,11 +94,8 @@ namespace EzMapper
                         }
                     }
 
-                }
-                else if (table.Type == typeof(ManyToManyAssignmentTable))
-                {
-                    // m:n
-                    
+                    insertStatements.AddRange(tmpStatements);
+
                 }
                 else if (table.Type == typeof(PrimitivesChildTable)) // a collection of primitives (1:n)
                 {

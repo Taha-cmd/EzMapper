@@ -11,5 +11,6 @@ namespace EzMapper.Models
     {
         public object Model { get; set; } // actual data
         public Table Table { get; set; } // table structure
+        public bool Replaceable { get; set; } = false;
     }
 }
