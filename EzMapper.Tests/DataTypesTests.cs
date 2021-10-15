@@ -1,11 +1,7 @@
-﻿using EzMapper.Tests.Models;
-using EzMapper.Reflection;
+﻿using EzMapper.Reflection;
+using EzMapper.Tests.Models;
 using NUnit.Framework;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EzMapper.Tests
 {

@@ -1,17 +1,16 @@
 ﻿using EzMapper.Attributes;
-using EzMapper.Models;
 using EzMapper.Database;
+using EzMapper.Models;
+using EzMapper.Reflection;
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Data.Common;
+using System.Data.SQLite;
+using System.IO;
 using System.Linq;
 using System.Reflection;
-using EzMapper.Reflection;
 using System.Text;
-using System.IO;
-using System.Data.SQLite;
-using System.Data.Common;
-using System.Dynamic;
+using System.Threading.Tasks;
 
 namespace EzMapper
 {
@@ -41,15 +40,12 @@ namespace EzMapper
         public static void Build()
         {
             
-
             if (_isBuilt) return;
 
-            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
             SQLiteConnection.CreateFile(Default.DbName);
-            
 
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
             List<Table> tables = new();
-            //List<string> createTableStatements = new();
 
             _types.ForEach(type => tables.AddRange(CreateTables(type)));
             tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList(); // get rid of duplicate tables
@@ -136,14 +132,31 @@ namespace EzMapper
 
         }
 
+        public static T Get<T>(int id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public static IEnumerable<T> Get<T>()
+        {
+            throw new NotImplementedException();
+        }
+
+        public static async Task SaveAsync(object model)
+        {
+            await Task.Run(() => Save(model));
+        }
 
         public static void Save(object model)
         {
+            Assertion.NotNull(model, nameof(model));
+
             if (!_isBuilt)
                 throw new Exception("You can't save objects yet, the database has not been built");
 
             if (!_types.Contains(model.GetType()))
                 throw new Exception($"object of type {model} is not registered");
+
 
             List<Table> tables = SortTablesByForeignKeys(CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First())).ToList();
             List<InsertStatement> insertStatements = new();
@@ -152,59 +165,10 @@ namespace EzMapper
 
             foreach (InsertStatement stmt in insertStatements)
             {
-                List<DbParameter> paras = new();
+                IEnumerable<DbParameter> paras = ModelParser.GetDbParams(stmt, tables, insertStatements, _db);
+                string sql = SqlStatementBuilder.CreateInsertStatement(stmt);
 
-                foreach(Column col in stmt.Table.Columns)
-                {
-
-                    if (col.IsForeignKey && stmt.Table.Type != typeof(ManyToManyAssignmentTable))
-                    {
-                        
-                        var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First(); // find the foriegn key
-                        var targetTable = tables.Where(t => t.Name == fk.TargetTable).First(); // find the target table
-
-                        object obj;
-                        if (Types.HasObjectOfType(stmt.Model, targetTable.Type)) // if the object contains the nested object, find the nested object from the current object
-                        {
-                            // we can deduce the field name based on the foreign key, since foreign keys are created based on conventions and the use cannot influence it
-                            // for example: if the object Laptop has a reference to a property called CPU, then the foreign key will be called CPUID
-                            // thus, a foreign key of the name CarId for example refers to a property called Car
-                            string propertyName = col.Name.Replace("ID", "");
-                            obj = stmt.Model.GetType().GetProperty(propertyName).GetValue(stmt.Model);
-                        }
-                        else
-                        {
-                            obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model; // find the correct object
-                        }
-                         
-                        if(obj is not null)
-                        {
-                            var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
-                            
-                            paras.Add(_db.Param(col.Name, value));
-                        }
-                        else
-                        {
-                            col.Ignored = true;
-                        }
-
-                    }
-                    else
-                    {
-                        
-                        if(stmt.Model is ExpandoObject @object)
-                        {
-                            paras.Add(_db.Param(col.Name, @object.Where(el => el.Key == col.Name).First().Value));
-                        }
-                        else
-                        {
-                            paras.Add(_db.Param(col.Name, stmt.Table.Type.GetProperty(col.Name).GetValue(stmt.Model)));
-
-                        }
-                    }
-                    
-                }
-                _db.ExecuteNonQuery(SqlStatementBuilder.CreateInsertStatement(stmt), paras.ToArray());
+                _db.ExecuteNonQuery(sql, paras.ToArray());
             }
         }
 
@@ -255,12 +219,12 @@ namespace EzMapper
             bool fk = false;
             if (!Types.HasParentModel(model))
             {
-                primaryKey = SqlTypeInspector.GetPrimaryKeyPropertyName(props.ToArray());
+                primaryKey = ModelParser.GetPrimaryKeyPropertyName(props.ToArray());
             }
             else
             {
-                primaryKey = model.GetType().BaseType.Name + "ID";
-                fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray())));
+                primaryKey = model.GetType().BaseType.Name + Default.IdProprtyName;
+                fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, ModelParser.GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray())));
                 fk = true;
             }
 
@@ -287,12 +251,12 @@ namespace EzMapper
                             tables.AddRange(GetTableHierarchy(Activator.CreateInstance(elementType)));
 
                             // create assignment table (id, fk1, fk2)
-                            tableCols.Add(new Column($"ID", "PRIMARY KEY"));
-                            tableCols.Add(new Column($"{tableName}ID", true));// reference parent table
-                            tableCols.Add(new Column($"{elementType.Name}ID", true)); // reference child table
+                            tableCols.Add(new Column(Default.IdProprtyName, "PRIMARY KEY"));
+                            tableCols.Add(new Column($"{tableName}{Default.IdProprtyName}", true));// reference parent table
+                            tableCols.Add(new Column($"{elementType.Name}{Default.IdProprtyName}", true)); // reference child table
 
-                            tableFks.Add(new ForeignKey($"{tableName}ID", model.GetType().Name, primaryKey));
-                            tableFks.Add(new ForeignKey($"{elementType.Name}ID", elementType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
+                            tableFks.Add(new ForeignKey($"{tableName}{Default.IdProprtyName}", model.GetType().Name, primaryKey));
+                            tableFks.Add(new ForeignKey($"{elementType.Name}{Default.IdProprtyName}", elementType.Name, ModelParser.GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
 
                             tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}", typeof(ManyToManyAssignmentTable)));
                              
@@ -302,13 +266,13 @@ namespace EzMapper
                             // 1:n relationships
                             // check for element type again, recursive call for non primitves
 
-                            tableCols.Add(new Column($"{model.GetType().Name}ID", true));;
-                            tableFks.Add(new ForeignKey($"{model.GetType().Name}ID", model.GetType().Name, SqlTypeInspector.GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray())));
+                            tableCols.Add(new Column($"{model.GetType().Name}{Default.IdProprtyName}", true));;
+                            tableFks.Add(new ForeignKey($"{model.GetType().Name}{Default.IdProprtyName}", model.GetType().Name, ModelParser.GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray())));
 
                             if (Types.IsPrimitive(elementType))
                             {
 
-                                tableCols.Add(new Column("ID", "PRIMARY KEY"));
+                                tableCols.Add(new Column(Default.IdProprtyName, "PRIMARY KEY"));
                                 tableCols.Add(new Column(prop.Name));
 
                                 tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name, typeof(PrimitivesChildTable)));
@@ -325,8 +289,8 @@ namespace EzMapper
                         // 1:1 relationships
                         tables.AddRange(CreateTables(prop.PropertyType));
 
-                        columns.Add(new Column($"{prop.Name}ID", true));
-                        fks.Add(new ForeignKey($"{prop.Name}ID", prop.PropertyType.Name, SqlTypeInspector.GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties().ToArray())));
+                        columns.Add(new Column($"{prop.Name}{Default.IdProprtyName}", true));
+                        fks.Add(new ForeignKey($"{prop.Name}{Default.IdProprtyName}", prop.PropertyType.Name, ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties().ToArray())));
                     }
 
                     continue;
@@ -335,13 +299,13 @@ namespace EzMapper
                 var col = new Column(prop.Name);
                 
                 if(Types.HasAttribute<NotNullAttribute>(prop) || !Types.IsNullable(model, prop.Name))
-                    col.Constrains.Add("NOT NULL");
+                    col.Constraints.Add("NOT NULL");
 
                 if (Types.HasAttribute<UniqueAttribute>(prop))
-                    col.Constrains.Add("UNIQUE");
+                    col.Constraints.Add("UNIQUE");
 
                 if (Types.HasAttribute<DefaultValueAttribute>(prop))
-                    col.Constrains.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
+                    col.Constraints.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
 
                 columns.Add(col);
             }

@@ -17,7 +17,7 @@ namespace EzMapper.Database
                 table.Columns.ForEach(col =>
                 {
                     builder.Append($" {col.Name} {col.Type} ");
-                    col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
+                    col.Constraints.ForEach(constraint => builder.Append($"{constraint} "));
                     builder.Append(',');
                 });
 

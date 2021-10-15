@@ -9,7 +9,7 @@ namespace EzMapper.Models
         public Column(string name, params string[] constraints)
         {
             Name = name;
-            Constrains.AddRange(constraints);
+            Constraints.AddRange(constraints);
         }
 
         public Column(string name, bool isForeignKey)
@@ -20,9 +20,9 @@ namespace EzMapper.Models
 
         public bool Ignored { get; set; } = false;
         public bool IsForeignKey { get; set; } = false;
-        public bool IsPrimaryKey => Constrains.Contains("PRIMARY KEY");
+        public bool IsPrimaryKey => Constraints.Contains("PRIMARY KEY");
         public string Name { get; set; }
         public string Type { get; set; } = "INTEGER";
-        public List<string> Constrains { get; set; } = new();
+        public List<string> Constraints { get; set; } = new();
     }
 }
