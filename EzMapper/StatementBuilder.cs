@@ -23,7 +23,6 @@ namespace EzMapper
 
         public static IEnumerable<InsertStatement> TableToInsertStatements(Table table, object model, Table[] tables)
         {
-            //TODO: set replaceable flag for shareable objects
             IEnumerable<object> models = Types.FlattenNestedObjects(model); // retrieve all nested objects and flatten the heirarchy (only for 1:1 relationships)
             var insertStatements = new List<InsertStatement>();
 
@@ -39,7 +38,7 @@ namespace EzMapper
                 }
                 else if (Types.HasCollectionOfType(model, table.Type)) // a collection of objects
                 {
-                    // this will add the entier collection  1:n
+                    // this will add the entire collection  1:n
                     IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
                     List<InsertStatement> tmpStatements = new();
                     foreach (var obj in collection)
@@ -94,22 +93,35 @@ namespace EzMapper
                 }
                 else if (table.Type == typeof(PrimitivesChildTable)) // a collection of primitives (1:n)
                 {
+                    //if this propety is nested, there might more than one collection
+                    // person has cars => each car has a list of primitves
+                    // =>find all owerns
                     var targetCollectionPropertyName = table.Columns.Where(col => !col.IsForeignKey && !col.IsPrimaryKey).First().Name;
-                    IList collection = (IList)model.GetType().GetProperty(targetCollectionPropertyName).GetValue(model);
 
+                    // find owner of the collection
+                    string targetTableName = table.ForeignKeys[0].TargetTable;
+                    var targetTable = tables.Where(t => t.Name == targetTableName).First();
+
+
+                    IEnumerable<object> owners = models.Where(m => m?.GetType() == targetTable.Type);
                     table.Columns.Remove(table.Columns.Where(col => col.IsPrimaryKey).First());
-
-
-                    foreach (var primitve in collection)
+                    foreach (object owner in owners)
                     {
-                        var obj = new ExpandoObject() as IDictionary<string, object>;
-                        obj.Add(targetCollectionPropertyName, primitve);
-                        insertStatements.Add(CreateInsertStatement(table, obj));
+                        IList collection = (IList)targetTable.Type.GetProperty(targetCollectionPropertyName).GetValue(owner);
+
+                        foreach (var primitve in collection)
+                        {
+                            var obj = new ExpandoObject() as IDictionary<string, object>;
+                            obj.Add(targetCollectionPropertyName, primitve);
+                            obj.Add(Default.OwnerIdPropertyName, owner.GetType().GetProperty(targetTable.PrimaryKey).GetValue(owner));
+                            insertStatements.Add(CreateInsertStatement(table, obj));
+                        }
                     }
+
+
                 }
-                else // object (1:1)
+                else if(!Types.IsPrimitive(table.Type) && !Types.IsCollection(table.Type))// object (1:1)
                 {
-                    //TODO: handle nested objects
                     var objects = models.Where(m => m?.GetType().Name == table.Name);
 
                     foreach (object obj in objects)
@@ -121,5 +133,9 @@ namespace EzMapper
             
         }
 
+        public static SelectStatement CreateSelectStatement(Table mainTable, List<Join> joins)
+        {
+            return new SelectStatement(mainTable, joins.ToArray());
+        }
     }
 }

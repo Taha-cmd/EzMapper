@@ -10,5 +10,6 @@ namespace EzMapper.ConsoleApp.Models
     {
         public int ID { get; set; }
         public string PlaceHolder { get; set; }
+        public string[] ListOfStuff { get; set; }
     }
 }

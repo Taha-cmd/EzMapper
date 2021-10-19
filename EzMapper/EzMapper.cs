@@ -52,7 +52,6 @@ namespace EzMapper
 
             foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
-                Console.WriteLine(statement);
                 _db.ExecuteNonQuery(statement);
             }
 
@@ -139,7 +138,74 @@ namespace EzMapper
 
         public static IEnumerable<T> Get<T>()
         {
-            throw new NotImplementedException();
+            if (!_types.Contains(typeof(T)))
+                throw new Exception($"object of type {typeof(T)} is not registered");
+
+            
+            List<Table> tables = SortTablesByForeignKeys(CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
+
+            Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
+            List<Join> joins = GetJoins(mainTable, tables, mainTable).ToList();
+            
+
+            SelectStatement stmt = new(mainTable, joins.ToArray());
+            string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
+            Console.WriteLine(sqlStatement);
+
+
+            //HERE
+
+            return new List<T>();
+        }
+
+
+        private static IEnumerable<Join> GetJoins(Table mainTable, List<Table> tables, Table originalTable)
+        {
+            Assertion.NotNull(mainTable, nameof(mainTable));
+
+
+            List<Table> tablesClone = new(tables);
+            List<Join> joins = new();
+
+
+            //deal with the easy case: nested objects and inheritance
+            foreach (var col in mainTable.Columns)
+            {
+                if(col.IsForeignKey)
+                {
+                    ForeignKey fk = mainTable.ForeignKeys.Where(f => f.FieldName == col.Name).First();
+                    Table target = tablesClone.Where(t => t.Name == fk.TargetTable).First();
+                    var j = new Join() { Table = mainTable, ForeignKey = col.Name, TargetTable = target, PrimaryKey = target.PrimaryKey };
+                    joins.Add(j);
+                    joins.AddRange(GetJoins(target, tablesClone, mainTable)); // this takes care of nested objects
+                }
+            }
+
+
+            foreach (var table in tablesClone)
+            {
+                if (table.Type == typeof(PrimitivesChildTable))
+                {
+                    //find the owner's table (the property might be inherited)
+                    //if the primary key is also a foreign key, then the target table is the owner of the collection
+
+                    // this table has 3 cols: value col, pk and fk. fk points to main table's pk
+                    var fk = table.ForeignKeys[0];
+                    var target = tables.Where(t => t.Name == fk.TargetTable).First();
+
+                    // we perform the join from the main table to the collection's table, so we need to reverse the primary and foreign key
+                    joins.Add(new Join() { Table = originalTable, ForeignKey = originalTable.PrimaryKey, TargetTable = table, PrimaryKey = fk.FieldName });
+                }
+                else if(table.Type == typeof(ManyToManyAssignmentTable))
+                {
+                    //TODO: deal with m:n
+                }
+            }
+
+            
+
+
+            return joins.GroupBy(j => j.TargetTable).Select(g => g.First());
         }
 
         public static async Task SaveAsync(object model)

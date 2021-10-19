@@ -33,11 +33,11 @@ namespace EzMapper.ConsoleApp
                            new Book(){ ID = 2, Title = "Animal Farm"}
                        },
                 Car = new Car() { ModelNumber = 3, Brand = "Volvo" },
-                Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = new Cpu() { ID = 1, Brand = "Intel", Alu = new AluUnit() { ID = 2, PlaceHolder = "out of ideas" } } },
+                Laptop = new Laptop() { ID = 2, Brand = "Lenovo", CPU = new Cpu() { ID = 1, Brand = "Intel", Alu = new AluUnit() { ID = 2, PlaceHolder = "out of ideas", ListOfStuff = new string[] { "one", "two", "three" } } } },
                 Phones = new List<Phone>()
                 {
-                    new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea" } } },
-                    new Phone() { ID = 2, Brand = "IPhone", CPU = new Cpu() { ID = 3, Brand = "apple fancy processor", Alu = new AluUnit() { ID = 3, PlaceHolder = "really no idea" } } },
+                    new Phone() { ID = 1, Brand = "Samsung", CPU = new Cpu() { ID = 2, Brand = "Snapdragon", Alu = new AluUnit() { ID = 1, PlaceHolder = "no idea", ListOfStuff = new string[] {"four", "five", "six"} } } },
+                    new Phone() { ID = 2, Brand = "IPhone", CPU = new Cpu() { ID = 3, Brand = "apple fancy processor", Alu = new AluUnit() { ID = 3, PlaceHolder = "really no idea", ListOfStuff = new string[] {"seven", "eight", "nine"} } } },
                 }
             };
 
@@ -75,6 +75,9 @@ namespace EzMapper.ConsoleApp
             EzMapper.Save(student);
             EzMapper.Save(teacher1);
             EzMapper.Save(teacher2);
+
+            EzMapper.Get<Student>();
+            EzMapper.Get<Teacher>();
 
 
 

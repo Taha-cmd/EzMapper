@@ -75,7 +75,23 @@ namespace EzMapper.Database
                     }
                     else
                     {
-                        obj = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name).First().Model; // find the correct object
+                        var possibleOwners = insertStatements.Where(stmt => stmt.Table.Name == targetTable.Name); // find the correct object
+
+                        if (stmt.Model is ExpandoObject)
+                        {
+                            var expando = (ExpandoObject)stmt.Model;
+
+                            string pkPropertyName = GetPrimaryKeyPropertyName(possibleOwners.First().Model.GetType().GetProperties());
+                            int ownerPKValue = (int)expando.Where(el => el.Key == Default.OwnerIdPropertyName).First().Value;
+                            obj = possibleOwners.Where(ow => (int)ow.Model.GetType().GetProperty(pkPropertyName).GetValue(ow.Model) == ownerPKValue).First().Model;
+                        }
+                        else
+                        {
+                            obj = possibleOwners.First().Model;
+                        }
+
+
+                        
                     }
 
                     if (obj is not null)

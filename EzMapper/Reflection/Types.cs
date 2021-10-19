@@ -137,6 +137,11 @@ namespace EzMapper.Reflection
             return HasAttribute<SharedAttribute>(collectionTypeProp);
         }
 
+        internal static object FindOwnerInObjectHierarchy(object root, object target)
+        {
+            return new object();
+        }
+
         public static IEnumerable<object> FlattenNestedObjects(object model)
         {
             List<object> models = new();
@@ -170,7 +175,10 @@ namespace EzMapper.Reflection
             }
 
             if (HasParentModel(model))
+            {
                 models.Add(ConvertToParentModel(model));
+            }
+                
 
             return models;
         }

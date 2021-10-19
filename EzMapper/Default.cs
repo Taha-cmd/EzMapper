@@ -10,5 +10,6 @@ namespace EzMapper
     {
         public const string DbName = "db.sqlite";
         public const string IdProprtyName = "ID";
+        public const string OwnerIdPropertyName = "OwnerId";
     }
 }

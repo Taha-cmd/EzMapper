@@ -52,5 +52,17 @@ namespace EzMapper.Database
 
             return builder.ToString();
         }
+
+        public static string CreateSelectStatement(SelectStatement selectStatement)
+        {
+            var builder = new StringBuilder($"SELECT * FROM {selectStatement.Table.Name} ");
+
+            foreach(var join in selectStatement.Joins)
+            {
+                builder.Append($"JOIN {join.TargetTable.Name} ON {join.TargetTable.Name}.{join.PrimaryKey} = {join.Table.Name}.{join.ForeignKey} ");
+            }
+
+            return builder.ToString();
+        }
     }
 }
