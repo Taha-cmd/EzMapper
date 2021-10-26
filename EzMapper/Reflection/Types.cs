@@ -99,6 +99,11 @@ namespace EzMapper.Reflection
             return parent;
         }
 
+        public static bool HasCollectionOfType(Type parent, Type member)
+        {
+            return HasCollectionOfType(Activator.CreateInstance(parent), member);
+        }
+
         public static bool HasCollectionOfType(object model, Type type)
         {
             var props = model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
@@ -187,6 +192,11 @@ namespace EzMapper.Reflection
         {
             var props = parent.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance);
             return props.Any(prop => prop.PropertyType == child);
+        }
+
+        public static bool HasObjectOfType(Type parent, Type child)
+        {
+            return HasObjectOfType(Activator.CreateInstance(parent), child);
         }
 
         //public static IEnumerable<object> GetCollectionOfPropertyName

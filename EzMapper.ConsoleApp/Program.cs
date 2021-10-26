@@ -13,6 +13,7 @@ namespace EzMapper.ConsoleApp
     {
         static void Main(string[] args)
         {
+            File.Delete("db.sqlite");
 
             EzMapper.Register<Student>();
             EzMapper.Register<Teacher>();
@@ -72,9 +73,7 @@ namespace EzMapper.ConsoleApp
                 Courses = new List<Course>() {  c2, c3 }
             };
 
-            EzMapper.Save(student);
-            EzMapper.Save(teacher1);
-            EzMapper.Save(teacher2);
+            EzMapper.Save(student, teacher1, teacher2);
 
             EzMapper.Get<Student>();
             EzMapper.Get<Teacher>();

@@ -55,11 +55,21 @@ namespace EzMapper.Database
 
         public static string CreateSelectStatement(SelectStatement selectStatement)
         {
-            var builder = new StringBuilder($"SELECT * FROM {selectStatement.Table.Name} ");
+            var columnsBuilder = new StringBuilder();
+
+            selectStatement.Table.Columns.ForEach(col => columnsBuilder.Append($"{selectStatement.Table.Alias}.{col.Name} AS {selectStatement.Table.Name}_{col.Name},"));
 
             foreach(var join in selectStatement.Joins)
             {
-                builder.Append($"JOIN {join.TargetTable.Name} ON {join.TargetTable.Name}.{join.PrimaryKey} = {join.Table.Name}.{join.ForeignKey} ");
+                join.TargetTable.Columns.ForEach(col => columnsBuilder.Append($"{join.TargetTable.Alias}.{col.Name} AS {join.Table.Name}_{col.Name},"));
+            }
+            columnsBuilder.Replace(",", "", columnsBuilder.Length - 1, 1); // get rid of trailing comma
+
+            var builder = new StringBuilder($"SELECT * FROM {selectStatement.Table.Name} {selectStatement.Table.Alias} ");
+
+            foreach(var join in selectStatement.Joins)
+            {
+                builder.Append($"LEFT JOIN {join.TargetTable.Name} {join.TargetTable.Alias} ON {join.TargetTable.Alias}.{join.PrimaryKey} = {join.Table.Alias}.{join.ForeignKey} ");
             }
 
             return builder.ToString();

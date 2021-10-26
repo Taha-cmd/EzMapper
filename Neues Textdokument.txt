@@ -1,0 +1,6 @@
+select * from student 
+join person on student.PersonID = Person.ID
+join laptop on Student.LaptopID = Laptop.ID
+join Cpu x on x.ID = Laptop.CPUID 
+join phone on Phone.StudentID = Student.PersonID
+join CPU on Cpu.ID = Phone.CPUID 
