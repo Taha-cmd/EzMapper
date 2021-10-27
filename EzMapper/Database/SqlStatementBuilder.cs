@@ -61,11 +61,11 @@ namespace EzMapper.Database
 
             foreach(var join in selectStatement.Joins)
             {
-                join.TargetTable.Columns.ForEach(col => columnsBuilder.Append($"{join.TargetTable.Alias}.{col.Name} AS {join.Table.Name}_{col.Name},"));
+                join.TargetTable.Columns.ForEach(col => columnsBuilder.Append($"{join.TargetTable.Alias}.{col.Name} AS {join.TargetTable.Name}_{col.Name},"));
             }
             columnsBuilder.Replace(",", "", columnsBuilder.Length - 1, 1); // get rid of trailing comma
 
-            var builder = new StringBuilder($"SELECT * FROM {selectStatement.Table.Name} {selectStatement.Table.Alias} ");
+            var builder = new StringBuilder($"SELECT {columnsBuilder} FROM {selectStatement.Table.Name} {selectStatement.Table.Alias} ");
 
             foreach(var join in selectStatement.Joins)
             {

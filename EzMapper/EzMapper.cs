@@ -87,15 +87,73 @@ namespace EzMapper
  
             SelectStatement stmt = new(mainTable, joins.ToArray());
             string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
+            Console.WriteLine(sqlStatement);
 
 
-            _db.ExecuteQuery<T>(sqlStatement, reader =>
-            {
-                //TODO: read the data from the reader into the object(s)
-                return Activator.CreateInstance<T>();
-            });
+            _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
 
             return new List<T>();
+        }
+
+        private static T ObjectReader<T>(DbDataReader reader)
+        {
+
+            var typeMapping = GetPropertyColumnMapping<T>();
+
+            while (reader.Read())
+            {
+                int ordinal = reader.GetOrdinal("ID");
+                int id = reader.GetInt32(ordinal);
+            }
+
+            return Activator.CreateInstance<T>();
+        }
+
+        private static Dictionary<string, string> GetPropertyColumnMapping<T>()
+        {
+            //cases to deal with: inheritance, nested objects, 1:n primitives, 1:n complex, m:n
+            object model = Activator.CreateInstance<T>();
+            Dictionary<string, string> propertyColumnsMapping = new();
+
+            if (Types.HasParentModel(model))
+                propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(model.GetType().BaseType)); // inhertiance
+
+            foreach (var prop in model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance))
+            {
+                if(!Types.IsCollection(prop.PropertyType) && !Types.IsPrimitive(prop.PropertyType)) // nested objects 1:1
+                {
+                    propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(prop.PropertyType));
+                    continue;
+                }
+
+                if (Types.IsCollection(prop.PropertyType))
+                {
+                    if( Types.IsPrimitive ( Types.GetElementType(prop.PropertyType) )  )
+                    {
+
+                    }
+                    else
+                    {
+                        propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(Types.GetElementType(prop.PropertyType)));
+                    }
+                    continue;
+                }
+
+                propertyColumnsMapping.Add($"{model.GetType().Name}.{prop.Name}", $"{model.GetType().Name}_{prop.Name}");
+            }
+
+            return propertyColumnsMapping;
+        }
+
+        private static Dictionary<string, string> GetPropertyColumnMappingWithType(Type type)
+        {
+            var x = typeof(EzMapper).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
+            var methodInfo = typeof(EzMapper).GetMethod("GetPropertyColumnMapping", BindingFlags.NonPublic | BindingFlags.Static); // ger private methods
+            var genericMethodInfo = methodInfo.MakeGenericMethod(type);
+            return (Dictionary<string, string>)genericMethodInfo.Invoke(null, new object[] { });
+            
+            return null;
+
         }
 
 
