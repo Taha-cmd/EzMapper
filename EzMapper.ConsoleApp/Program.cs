@@ -55,7 +55,7 @@ namespace EzMapper.ConsoleApp
                 FirstName = "Jane",
                 LastName = "Doe",
                 Hobbies = new string[] {"Reading", "Watching TV", "Swimming"},
-                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                Numbers = new List<int>() { 1, 2, 3 },
                 WorkingYears = 15,
                 Courses = new List<Course>() { c1, c2}
             };
@@ -68,7 +68,7 @@ namespace EzMapper.ConsoleApp
                 FirstName = "Jack",
                 LastName = "Doe",
                 Hobbies = new string[] { "Reading" },
-                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6 },
+                Numbers = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 15 },
                 WorkingYears = 5,
                 Courses = new List<Course>() {  c2, c3 }
             };

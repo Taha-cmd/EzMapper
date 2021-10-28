@@ -4,6 +4,7 @@ using EzMapper.Models;
 using EzMapper.Reflection;
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.Data.Common;
 using System.Data.SQLite;
 using System.IO;
@@ -143,20 +144,70 @@ namespace EzMapper
                     value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "EzGet", prop.PropertyType, where)).FirstOrDefault();
                     prop.SetValue(model, value);
                 }
-                else if(Types.IsCollection(prop.PropertyType))
+                else if(Types.IsCollection(prop.PropertyType)) // collections
                 {
+                    Type elementType = Types.GetElementType(prop.PropertyType);
+
                     //TODO: deal with collections
+                    if ( Types.IsPrimitive( elementType) ) // 1:n of primitves
+                    {
+                        //a primitve table has 3 cols: pk, fk to owner and the value
+
+                        //find table and foreign key names
+                        string tableName = prop.DeclaringType.Name + prop.Name;
+                        string fkName = prop.DeclaringType.Name + Default.IdProprtyName;
+
+                        // get primary key value
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T).GetProperties());
+                        string pkColumnName = $"{prop.DeclaringType.Name}_{pkPropertyName}";
+                        int ordinal = reader.GetOrdinal(pkColumnName);
+
+                        object pKvalue = Convert.ChangeType( reader.GetValue(ordinal), typeof(int) );
+                        string rawSql = $"SELECT {prop.Name} FROM {tableName} WHERE {fkName} = @fkvalue";
+
+                        //TODO: refactor collection management code
+
+                        //this will return IEnumerable<object>
+                        value = _db.ExecuteQuery(rawSql, (innerReader) => Convert.ChangeType(innerReader.GetValue(innerReader.GetOrdinal(prop.Name)), elementType), _db.Param("fkvalue", pKvalue));
+
+                        //IList is common interface for lists and arrays
+                        IList values = (IList)value;
+                        IList collectionValue = (IList)Activator.CreateInstance(prop.PropertyType, values.Count);
+
+                        bool isList = collectionValue.GetType().GetMethod("Add") is not null; // array types have an Add method from the IList interface, which always throws and exception, but GetMethod retuns false. WTF
+
+                        //https://docs.microsoft.com/en-us/dotnet/api/system.array?view=net-5.0
+                        // calling Add method on an array as an IList always throws notsupportedexception
+                        for (int i = 0; i < values.Count; i++)
+                        {
+
+                            if(isList)
+                            {
+                                collectionValue.Add(values[i]);
+                                continue;
+                            }
+                            
+                            //array
+                            collectionValue[i] = values[i];
+                        }
+
+                        prop.SetValue(model, collectionValue);
+
+                    }
+                    else
+                    {
+                        //TODO: deal with 1:n complex types and m:n
+                    }
                 }
             }
 
             return model;
-
         }
+
+        //private static 
 
         private static SelectStatement CreateSingleSelectStatement<T>() // will return a select statement for the primitves of an object (includes a join to parents if inherited)
         {
-            
-
             List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
             Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
             List<Join> allJoins = GetJoins(mainTable, tables, mainTable).ToList();
