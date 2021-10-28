@@ -79,32 +79,17 @@ namespace EzMapper
             if (!_types.Contains(typeof(T)))
                 throw new Exception($"object of type {typeof(T)} is not registered");
 
-            return EzGet<T>();
+            return RecursiveGet<T>();
 
-            
-            //List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
-
-            //Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
-            //List<Join> joins = GetJoins(mainTable, tables, mainTable).ToList();
-
- 
-            //SelectStatement stmt = new(mainTable, joins.ToArray());
-            //string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
-            //Console.WriteLine(sqlStatement);
-
-
-            //_db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
-
-            //return new List<T>();
         }
 
-        private static IEnumerable<T> EzGet<T>(WhereClause whereClause = null)
+        private static IEnumerable<T> RecursiveGet<T>(WhereClause whereClause = null)
         {
             var stmt = CreateSingleSelectStatement<T>();
             string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt, whereClause);
 
             return _db.ExecuteQuery<T>(sqlStatement, CallBack<T>);
-            //return new List<T>();
+
         }
         private static T CallBack<T>(DbDataReader reader)
         {
@@ -141,7 +126,7 @@ namespace EzMapper
 
                     var where = new WhereClause(pk, "=", fkValue.ToString());
 
-                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "EzGet", prop.PropertyType, where)).FirstOrDefault();
+                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", prop.PropertyType, where)).FirstOrDefault();
                     prop.SetValue(model, value);
                 }
                 else if(Types.IsCollection(prop.PropertyType)) // collections
@@ -197,6 +182,31 @@ namespace EzMapper
                     else
                     {
                         //TODO: deal with 1:n complex types and m:n
+                        if(Types.HasAttribute<SharedAttribute>(prop)) // m:n
+                        {
+
+                        }
+                        else // 1:n complex
+                        {
+                            // find pk and pk value of owner
+                            string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(props);
+
+                            //find the pk property so we can find thedeclaring type of primary key (in case we are dealing with inheritance)
+                            var pkProp = props.Where(p => p.Name == pkPropertyName).First();
+
+                            string pkColumnName = $"{pkProp.DeclaringType.Name}_{pkPropertyName}";
+                            int pkOrdinal = reader.GetOrdinal(pkColumnName);
+
+                            object pKvalue = Convert.ChangeType(reader.GetValue(pkOrdinal), typeof(int));
+
+                            //find fk name in child table
+                            string fkColumnName = $"{prop.DeclaringType.Name}{Default.IdProprtyName}";
+
+                            var where = new WhereClause(fkColumnName, "=", pKvalue.ToString());
+
+                            value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", Types.GetElementType( prop.PropertyType ), where));
+                            prop.SetValue(model, value);
+                        }
                     }
                 }
             }
@@ -234,63 +244,63 @@ namespace EzMapper
         }
 
 
-        private static T ObjectReader<T>(DbDataReader reader)
-        {
+        //private static T ObjectReader<T>(DbDataReader reader)
+        //{
 
-            var typeMapping = GetPropertyColumnMapping<T>();
+        //    var typeMapping = GetPropertyColumnMapping<T>();
 
-            while (reader.Read())
-            {
-                int ordinal = reader.GetOrdinal("ID");
-                int id = reader.GetInt32(ordinal);
-            }
+        //    while (reader.Read())
+        //    {
+        //        int ordinal = reader.GetOrdinal("ID");
+        //        int id = reader.GetInt32(ordinal);
+        //    }
 
-            return Activator.CreateInstance<T>();
-        }
+        //    return Activator.CreateInstance<T>();
+        //}
 
-        private static Dictionary<string, string> GetPropertyColumnMapping<T>()
-        {
-            //cases to deal with: inheritance, nested objects, 1:n primitives, 1:n complex, m:n
-            object model = Activator.CreateInstance<T>();
-            Dictionary<string, string> propertyColumnsMapping = new();
+        //private static Dictionary<string, string> GetPropertyColumnMapping<T>()
+        //{
+        //    //cases to deal with: inheritance, nested objects, 1:n primitives, 1:n complex, m:n
+        //    object model = Activator.CreateInstance<T>();
+        //    Dictionary<string, string> propertyColumnsMapping = new();
 
-            if (Types.HasParentModel(model))
-                propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(model.GetType().BaseType)); // inhertiance
+        //    if (Types.HasParentModel(model))
+        //        propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(model.GetType().BaseType)); // inhertiance
 
-            foreach (var prop in model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance))
-            {
-                if(!Types.IsCollection(prop.PropertyType) && !Types.IsPrimitive(prop.PropertyType)) // nested objects 1:1
-                {
-                    propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(prop.PropertyType));
-                    continue;
-                }
+        //    foreach (var prop in model.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance))
+        //    {
+        //        if(!Types.IsCollection(prop.PropertyType) && !Types.IsPrimitive(prop.PropertyType)) // nested objects 1:1
+        //        {
+        //            propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(prop.PropertyType));
+        //            continue;
+        //        }
 
-                if (Types.IsCollection(prop.PropertyType))
-                {
-                    if( Types.IsPrimitive ( Types.GetElementType(prop.PropertyType) )  )
-                    {
+        //        if (Types.IsCollection(prop.PropertyType))
+        //        {
+        //            if( Types.IsPrimitive ( Types.GetElementType(prop.PropertyType) )  )
+        //            {
 
-                    }
-                    else
-                    {
-                        propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(Types.GetElementType(prop.PropertyType)));
-                    }
-                    continue;
-                }
+        //            }
+        //            else
+        //            {
+        //                propertyColumnsMapping.Merge(GetPropertyColumnMappingWithType(Types.GetElementType(prop.PropertyType)));
+        //            }
+        //            continue;
+        //        }
 
-                propertyColumnsMapping.Add($"{model.GetType().Name}.{prop.Name}", $"{model.GetType().Name}_{prop.Name}");
-            }
+        //        propertyColumnsMapping.Add($"{model.GetType().Name}.{prop.Name}", $"{model.GetType().Name}_{prop.Name}");
+        //    }
 
-            return propertyColumnsMapping;
-        }
+        //    return propertyColumnsMapping;
+        //}
 
-        private static Dictionary<string, string> GetPropertyColumnMappingWithType(Type type)
-        {
-            var methodInfo = typeof(EzMapper).GetMethod("GetPropertyColumnMapping", BindingFlags.NonPublic | BindingFlags.Static); // get private methods
-            var genericMethodInfo = methodInfo.MakeGenericMethod(type);
-            return (Dictionary<string, string>)genericMethodInfo.Invoke(null, new object[] { });
+        //private static Dictionary<string, string> GetPropertyColumnMappingWithType(Type type)
+        //{
+        //    var methodInfo = typeof(EzMapper).GetMethod("GetPropertyColumnMapping", BindingFlags.NonPublic | BindingFlags.Static); // get private methods
+        //    var genericMethodInfo = methodInfo.MakeGenericMethod(type);
+        //    return (Dictionary<string, string>)genericMethodInfo.Invoke(null, new object[] { });
             
-        }
+        //}
 
 
         private static IEnumerable<Join> GetJoins(Table mainTable, List<Table> tables, Table originalTable, bool ignoreInManyToManyAssignment = false)
