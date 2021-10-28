@@ -78,22 +78,110 @@ namespace EzMapper
             if (!_types.Contains(typeof(T)))
                 throw new Exception($"object of type {typeof(T)} is not registered");
 
-            
-            List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
+            return EzGet<T>();
 
-            Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
-            List<Join> joins = GetJoins(mainTable, tables, mainTable).ToList();
+            
+            //List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
+
+            //Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
+            //List<Join> joins = GetJoins(mainTable, tables, mainTable).ToList();
 
  
-            SelectStatement stmt = new(mainTable, joins.ToArray());
-            string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
-            Console.WriteLine(sqlStatement);
+            //SelectStatement stmt = new(mainTable, joins.ToArray());
+            //string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
+            //Console.WriteLine(sqlStatement);
 
 
-            _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
+            //_db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
 
-            return new List<T>();
+            //return new List<T>();
         }
+
+        private static IEnumerable<T> EzGet<T>(WhereClause whereClause = null)
+        {
+            var stmt = CreateSingleSelectStatement<T>();
+            string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt, whereClause);
+
+            return _db.ExecuteQuery<T>(sqlStatement, CallBack<T>);
+            //return new List<T>();
+        }
+        private static T CallBack<T>(DbDataReader reader)
+        {
+            T model = Activator.CreateInstance<T>();
+            var props = model.GetType().GetProperties();
+
+            foreach (var prop in props)
+            {
+                object value;
+
+                if (Types.IsPrimitive(prop.PropertyType)) // read all primitive values (including inherited ones)
+                {
+                    // get primitive values
+                    string columnName = $"{prop.DeclaringType.Name}_{prop.Name}";
+                    int ordinal = reader.GetOrdinal(columnName);
+                    value = reader.GetValue(ordinal);
+
+                    value = Convert.ChangeType(value, prop.PropertyType);
+                    prop.SetValue(model, value);
+                }
+                else if (!Types.IsPrimitive(prop.PropertyType) && !Types.IsCollection(prop.PropertyType)) // read nested objects (1:1)
+                {
+                    // when the property is another object, we save a foreign key in the main table
+                    string fkPropertyName = $"{prop.Name}{Default.IdProprtyName}";
+                    string columnName = $"{prop.DeclaringType.Name}_{fkPropertyName}";
+                    int ordinal = reader.GetOrdinal(columnName);
+                    object fkValue = reader.GetValue(ordinal);
+                    if (fkValue == DBNull.Value) continue;
+
+                    fkValue = Convert.ChangeType(fkValue, typeof(int));
+
+                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties());
+                    string pk = $"{prop.PropertyType.Name}_{targetPkPropertyName}";
+
+                    var where = new WhereClause(pk, "=", fkValue.ToString());
+
+                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "EzGet", prop.PropertyType, where)).FirstOrDefault();
+                    prop.SetValue(model, value);
+                }
+                else if(Types.IsCollection(prop.PropertyType))
+                {
+                    //TODO: deal with collections
+                }
+            }
+
+            return model;
+
+        }
+
+        private static SelectStatement CreateSingleSelectStatement<T>() // will return a select statement for the primitves of an object (includes a join to parents if inherited)
+        {
+            
+
+            List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
+            Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
+            List<Join> allJoins = GetJoins(mainTable, tables, mainTable).ToList();
+            List<Join> joins = new();
+
+            Column pk = mainTable.Columns.Where(col => col.IsPrimaryKey).First();
+
+            var stmt = new SelectStatement(mainTable);
+
+
+            while(pk.IsForeignKey)
+            {
+                var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
+                var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
+                joins.Add(allJoins.Where(j => j.Table.Name == mainTable.Name).First());
+
+                mainTable = targetTable;
+                pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
+            }
+
+            stmt.Joins.AddRange(joins);
+
+            return stmt;
+        }
+
 
         private static T ObjectReader<T>(DbDataReader reader)
         {
@@ -147,13 +235,10 @@ namespace EzMapper
 
         private static Dictionary<string, string> GetPropertyColumnMappingWithType(Type type)
         {
-            var x = typeof(EzMapper).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
-            var methodInfo = typeof(EzMapper).GetMethod("GetPropertyColumnMapping", BindingFlags.NonPublic | BindingFlags.Static); // ger private methods
+            var methodInfo = typeof(EzMapper).GetMethod("GetPropertyColumnMapping", BindingFlags.NonPublic | BindingFlags.Static); // get private methods
             var genericMethodInfo = methodInfo.MakeGenericMethod(type);
             return (Dictionary<string, string>)genericMethodInfo.Invoke(null, new object[] { });
             
-            return null;
-
         }
 
 

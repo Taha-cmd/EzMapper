@@ -10,6 +10,6 @@ namespace EzMapper.ConsoleApp.Models
     {
         public int ID { get; set; }
         public string Brand { get; set; }
-        public Cpu CPU { get; set; } = new Cpu();
+        public Cpu CPU { get; set; }
     }
 }

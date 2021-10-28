@@ -13,6 +13,11 @@ namespace EzMapper.Models
             Table = table;
             Joins.AddRange(joins);
         }
+
+        public SelectStatement(Table table)
+        {
+            Table = table;
+        }
         public Table Table { get; set; } // table structure
         public List<Join> Joins { get; set; } = new();
     }

@@ -53,7 +53,7 @@ namespace EzMapper.Database
             return builder.ToString();
         }
 
-        public static string CreateSelectStatement(SelectStatement selectStatement)
+        public static string CreateSelectStatement(SelectStatement selectStatement, WhereClause whereClause = null)
         {
             var columnsBuilder = new StringBuilder();
 
@@ -70,6 +70,11 @@ namespace EzMapper.Database
             foreach(var join in selectStatement.Joins)
             {
                 builder.Append($"LEFT JOIN {join.TargetTable.Name} {join.TargetTable.Alias} ON {join.TargetTable.Alias}.{join.PrimaryKey} = {join.Table.Alias}.{join.ForeignKey} ");
+            }
+
+            if(whereClause is not null)
+            {
+                builder.Append($"WHERE {whereClause.LeftOperand} {whereClause.Operation} {whereClause.RightOperand}");
             }
 
             return builder.ToString();

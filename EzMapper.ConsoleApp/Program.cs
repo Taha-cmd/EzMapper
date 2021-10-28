@@ -75,8 +75,8 @@ namespace EzMapper.ConsoleApp
 
             EzMapper.Save(student, teacher1, teacher2);
 
-            EzMapper.Get<Student>();
-            EzMapper.Get<Teacher>();
+            var students = EzMapper.Get<Student>();
+            var teachers = EzMapper.Get<Teacher>();
 
 
 
@@ -125,9 +125,6 @@ namespace EzMapper.ConsoleApp
 
             //File.WriteAllText("test.txt", Class1.CreateTable(p2));
             //Console.WriteLine(Class1.HasAttribute<DefaultValueAttribute>(person.GetType().GetProperty("Age")));
-
-
-
         }
 
     }

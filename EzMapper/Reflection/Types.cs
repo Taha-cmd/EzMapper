@@ -199,6 +199,19 @@ namespace EzMapper.Reflection
             return HasObjectOfType(Activator.CreateInstance(parent), child);
         }
 
+        public static IEnumerable<PropertyInfo> GetPrimitiveProperties<T>() // includes inherited properties
+        {
+            return typeof(T).GetProperties()
+                .Where(prop => IsPrimitive(prop.PropertyType));
+        }
+
+        public static object InvokeGenericMethod(Type classType, object instance, string methodName, Type typeArugment, params object[] arguments)
+        {
+            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public); // get private methods
+            var genericMethodInfo = methodInfo.MakeGenericMethod(typeArugment);
+            return genericMethodInfo.Invoke(instance, arguments);
+        }
+
         //public static IEnumerable<object> GetCollectionOfPropertyName
 
     }

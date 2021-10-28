@@ -22,7 +22,7 @@ namespace EzMapper.Models
         public bool IsForeignKey { get; set; } = false;
         public bool IsPrimaryKey => Constraints.Contains("PRIMARY KEY");
         public string Name { get; set; }
-        public string Type { get; set; } = "INTEGER";
+        public string Type { get; set; } = "TEXT";
         public List<string> Constraints { get; set; } = new();
     }
 }
