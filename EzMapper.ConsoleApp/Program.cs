@@ -20,7 +20,6 @@ namespace EzMapper.ConsoleApp
             EzMapper.Build();
 
             
-
             Person student = new Student()
             {
                 ID = 1,
@@ -80,6 +79,11 @@ namespace EzMapper.ConsoleApp
             var students = EzMapper.Get<Student>();
             var teachers = EzMapper.Get<Teacher>();
 
+            var John = EzMapper.Get<Student>(1);
+            var Jane = EzMapper.Get<Teacher>(2);
+            var Jack = EzMapper.Get<Teacher>(3);
+
+            int affectedRows = EzMapper.Delete<Student>(1);
         }
 
     }

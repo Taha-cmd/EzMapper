@@ -2,6 +2,8 @@
 using System.Text;
 using System.Linq;
 using System.Collections.Generic;
+using System;
+using EzMapper.Attributes;
 
 namespace EzMapper.Database
 {
@@ -23,7 +25,7 @@ namespace EzMapper.Database
 
                 table.ForeignKeys.ForEach(fk =>
                 {
-                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
+                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}) ON DELETE {fk.Action.Value()},");
                 });
 
                 builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
@@ -78,6 +80,11 @@ namespace EzMapper.Database
             }
 
             return builder.ToString();
+        }
+
+        public static string CreateDeleteStatement(DeleteStatement stmt)
+        {
+            return $"DELETE FROM {stmt.Table.Name} WHERE {stmt.Table.PrimaryKey} = @p0";
         }
     }
 }

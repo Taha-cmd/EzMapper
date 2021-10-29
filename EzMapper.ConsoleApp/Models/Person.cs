@@ -12,7 +12,10 @@ namespace EzMapper.ConsoleApp.Models
         [PrimaryKey]
         public int ID { get; set; }
 
-        public string[] Hobbies { get; set; } 
+        [OnDelete(DeleteAction.Cascade)]
+        public string[] Hobbies { get; set; }
+
+        [OnDelete(DeleteAction.SetNull)]
         public List<int> Numbers {get; set;} = new();
 
         [Unique]
@@ -24,6 +27,7 @@ namespace EzMapper.ConsoleApp.Models
         [DefaultValue("23")]
         public int Age { get; set; }
 
+        [OnDelete(DeleteAction.Cascade)]
         public Car Car { get; set; }
     }
 }

@@ -11,8 +11,13 @@ namespace EzMapper.ConsoleApp.Models
     {
         public string School { get; set; }
 
+        [OnDelete(DeleteAction.Cascade)]
         public List<Phone> Phones { get; set; }
+
+        [OnDelete(DeleteAction.Cascade)]
         public Laptop Laptop { get; set; }
+
+        [OnDelete(DeleteAction.Cascade)]
         public List<Book> Books { get; set; } = new();
 
         

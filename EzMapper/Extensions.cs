@@ -6,11 +6,18 @@ using System.Threading.Tasks;
 
 namespace EzMapper
 {
-    public static class DictionaryExtensions
+    public static class Extensions
     {
         public static void Merge<TKey, TValue>(this Dictionary<TKey, TValue> me, Dictionary<TKey, TValue> other)
         {
             other.ToList().ForEach(kvp => me.Add(kvp.Key, kvp.Value));
+        }
+
+        public static void Swap<T>(this List<T> list, int indexA, int indexB)
+        {
+            T tmp = list[indexA];
+            list[indexA] = list[indexB];
+            list[indexB] = tmp;
         }
     }
 }

@@ -84,6 +84,13 @@ namespace EzMapper.Reflection
             return prop.CustomAttributes.Where(attr => attr.AttributeType.Name == typeof(T).Name).ToArray().Length == 1;
         }
 
+        public static Type FindPropertyOwnerType(Type type, string propertyName)
+        {
+            return type.GetProperty(propertyName, BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance) is null 
+                ? FindPropertyOwnerType(type.BaseType, propertyName) 
+                : type;
+        }
+
         public static object ConvertToParentModel(object model)
         {
             if (!HasParentModel(model))

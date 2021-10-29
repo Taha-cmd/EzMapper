@@ -10,6 +10,7 @@ namespace EzMapper.Models
         public string Name { get; set; }
         public List<Column> Columns { get; set; } = new();
         public List<ForeignKey> ForeignKeys { get; set; } = new();
+        public List<string> Triggers { get; set; }
 
         public string Alias { get; set; } = RandomString(10);
 
@@ -19,7 +20,7 @@ namespace EzMapper.Models
             Alias = RandomString(10);
         }
 
-        private static Random random = new Random();
+        private static Random random = new();
         private static string RandomString(int length)
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

@@ -53,9 +53,9 @@ namespace EzMapper
             
             if (_isBuilt) return;
 
-            SQLiteConnection.CreateFile(Default.DbName);
+            SQLiteConnection.CreateFile(Default.DbName + ";Version=3");
 
-            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}; Foreign Keys=True; Version=3;");
             List<Table> tables = new();
 
             _types.ForEach(type => tables.AddRange(ModelParser.CreateTables(type)));
@@ -63,15 +63,61 @@ namespace EzMapper
 
             foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
+                Console.WriteLine(statement);
                 _db.ExecuteNonQuery(statement);
             }
 
+            foreach(var table in tables)
+            {
+                if (table.Triggers is null) continue;
+
+                foreach(string triggerSql in table.Triggers)
+                {
+                    if(!string.IsNullOrEmpty(triggerSql))
+                    {
+                        Console.WriteLine(triggerSql);
+                        _db.ExecuteNonQuery(triggerSql);
+                    }
+                        
+                }
+            }
             _isBuilt = true;
+        }
+
+
+        public static int Delete<T>(int id)
+        {
+            //in case of inheritance, delete parent
+            var tables = ModelParser.CreateTables(typeof(T));
+            var table = tables.Where(t => t.Name == typeof(T).Name).First();
+
+            Column pk = table.Columns.Where(col => col.IsPrimaryKey).First();
+
+            //this will find the the root parent in case of inheritance
+            while (pk.IsForeignKey)
+            {
+                var fk = table.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
+                var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
+
+                table = targetTable;
+                pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
+            }
+
+            DeleteStatement stmt = new() { Table = table, ID = id };
+            string sql = SqlStatementBuilder.CreateDeleteStatement(stmt);
+            return _db.ExecuteNonQuery(sql, _db.Param("p0", id));
         }
 
         public static T Get<T>(int id)
         {
-            throw new NotImplementedException();
+            string pkFieldName = ModelParser.GetPkFieldName(typeof(T));
+
+            return RecursiveGet<T>(new WhereClause(pkFieldName, "=", id.ToString())).FirstOrDefault();
+        }
+
+        public static async Task<T> GetTAsync<T>(int id)
+        {
+            return await Task.Run(() => Get<T>(id));
         }
 
         public static IEnumerable<T> Get<T>()
@@ -83,13 +129,19 @@ namespace EzMapper
 
         }
 
+        public static async Task<IEnumerable<T>> GetTAsync<T>()
+        {
+            return await Task.Run(() => Get<T>());
+        }
+
+
+
         private static IEnumerable<T> RecursiveGet<T>(WhereClause whereClause = null)
         {
-            var stmt = CreateSingleSelectStatement<T>();
+            var stmt = StatementBuilder.CreateSingleSelectStatement<T>();
             string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt, whereClause);
 
             return _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
-
         }
         private static T ObjectReader<T>(DbDataReader reader)
         {
@@ -121,7 +173,7 @@ namespace EzMapper
 
                     fkValue = Convert.ChangeType(fkValue, typeof(int));
 
-                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties());
+                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties());
                     string pk = $"{prop.PropertyType.Name}_{targetPkPropertyName}";
 
                     var where = new WhereClause(pk, "=", fkValue.ToString());
@@ -142,7 +194,7 @@ namespace EzMapper
                         string fkName = prop.DeclaringType.Name + Default.IdProprtyName;
 
                         // get primary key value
-                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T).GetProperties());
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T), typeof(T).GetProperties());
                         string pkColumnName = $"{prop.DeclaringType.Name}_{pkPropertyName}";
                         int ordinal = reader.GetOrdinal(pkColumnName);
 
@@ -158,7 +210,7 @@ namespace EzMapper
                         IList values = (IList)value;
                         IList collectionValue = (IList)Activator.CreateInstance(prop.PropertyType, values.Count);
 
-                        bool isList = collectionValue.GetType().GetMethod("Add") is not null; // array types have an Add method from the IList interface, which always throws and exception, but GetMethod retuns false. WTF
+                        bool isList = collectionValue.GetType().IsGenericType;
 
                         //https://docs.microsoft.com/en-us/dotnet/api/system.array?view=net-5.0
                         // calling Add method on an array as an IList always throws notsupportedexception
@@ -180,7 +232,7 @@ namespace EzMapper
                     else
                     {
                         // find pk and pk value of owner
-                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(props);
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(elementType,props);
 
                         //find the pk property so we can find thedeclaring type of primary key (in case we are dealing with inheritance)
                         var pkProp = props.Where(p => p.Name == pkPropertyName).First();
@@ -190,13 +242,12 @@ namespace EzMapper
 
                         object pKvalue = Convert.ChangeType(reader.GetValue(pkOrdinal), typeof(int));
 
-                        //TODO: and m:n
                         if (Types.HasAttribute<SharedAttribute>(prop)) // m:n
                         {
                             // get the foriegn key names of the assignment table
 
                             string childTableName = elementType.Name;
-                            string childTablePkName = ModelParser.GetPrimaryKeyPropertyName(elementType.GetProperties());
+                            string childTablePkName = ModelParser.GetPrimaryKeyPropertyName(elementType,elementType.GetProperties());
                             string assignmentTableName = model.GetType().Name + "_" + elementType.Name;
                             string fkToOwnerColumnName = model.GetType().Name + Default.IdProprtyName;
                             string fkToChildColumnName = elementType.Name + Default.IdProprtyName;
@@ -205,8 +256,8 @@ namespace EzMapper
                             var rawSql = $"SELECT {fkToChildColumnName} FROM {assignmentTableName} WHERE {fkToOwnerColumnName} = @fkvalue";
                             IEnumerable<int> ids = _db.ExecuteQuery(rawSql, innerReader => Convert.ToInt32(innerReader.GetValue(0)), _db.Param("fkvalue", pKvalue.ToString()));
 
-                            Type listType = typeof(List<>).MakeGenericType(elementType);
-                            IList list = (IList)Activator.CreateInstance(listType);
+
+                            IList list = (IList)CollectionsHelper.CreateGenericList(elementType);
 
                             foreach(int id in ids)
                             {
@@ -245,124 +296,6 @@ namespace EzMapper
             return model;
         }
 
-        //private static 
-
-        private static SelectStatement CreateSingleSelectStatement<T>() // will return a select statement for the primitves of an object (includes a join to parents if inherited)
-        {
-            List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(typeof(T)).GroupBy(t => t.Name).Select(g => g.First())).ToList();
-            Table mainTable = tables.Where(t => t.Type == typeof(T)).First();
-            List<Join> allJoins = GetJoins(mainTable, tables, mainTable).ToList();
-            List<Join> joins = new();
-
-            Column pk = mainTable.Columns.Where(col => col.IsPrimaryKey).First();
-
-            var stmt = new SelectStatement(mainTable);
-
-            while(pk.IsForeignKey)
-            {
-                var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
-                var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
-                joins.Add(allJoins.Where(j => j.Table.Name == mainTable.Name).First());
-
-                mainTable = targetTable;
-                pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
-            }
-
-            stmt.Joins.AddRange(joins);
-
-            return stmt;
-        }
-
-        private static IEnumerable<Join> GetJoins(Table mainTable, List<Table> tables, Table originalTable, bool ignoreInManyToManyAssignment = false)
-        {
-
-            //important: create an alias for the target table on each join to avoid ambiguity
-            // do that by cloning the table, since we are dealing with reference types here, creating a new alias will affect all tables
-
-            Assertion.NotNull(mainTable, nameof(mainTable));
-
-
-            List<Table> tablesClone = new(tables);
-            List<Join> joins = new();
-
-
-            // this will handle cases where the foreign key is in the main table (1:1 and inheritance)
-            foreach (var col in mainTable.Columns)
-            {
-                if(col.IsForeignKey)
-                {
-                    ForeignKey fk = mainTable.ForeignKeys.Where(f => f.FieldName == col.Name).First();
-                    Table target = tablesClone.Where(t => t.Name == fk.TargetTable).First();
-
-                    // only create a join if the maintable contains the target table (actual 1:1 relationship) or the target is a base class
-                    // if the foreign key is the other way around, it is a 1:1 relationship
-                    if (Types.HasObjectOfType(mainTable.Type, target.Type) || mainTable.Type.IsAssignableTo(target.Type)) 
-                    {
-                        // cloning the table will create a new alias, needed if multiple tables join on the same table
-                        // example: select student, student has laptop and phone, each laptop and phone have a cpu. the problem will occur when we join on the cpu twice, thus we need a different alias
-                        var targetTable = target.Clone(); 
-
-                        var j = new Join() { Table = mainTable, ForeignKey = col.Name, TargetTable = targetTable, PrimaryKey = targetTable.PrimaryKey };
-                        joins.Add(j);
-                        joins.AddRange(GetJoins(targetTable, tablesClone, mainTable)); // this takes care of nested objects
-                    }
-
-                }
-            }
-
-
-
-            // this will handle cases where other tables contain a foreign key that points to the main table
-            // (1:n and m:n)
-            foreach (var table in tablesClone)
-            {
-                if (table.Name == mainTable.Name) continue; // skip checking relationships between the same table
-
-                foreach(var col in table.Columns)
-                {
-                    if(col.IsForeignKey)
-                    {
-                        ForeignKey fk = table.ForeignKeys.Where(f => f.FieldName == col.Name).First();
-
-                        if (fk.TargetTable == mainTable.Name) // if the foreign key points to the current table
-                        {
-                            if (table.Type == typeof(PrimitivesChildTable))
-                            {
-                                // this table has 3 cols: value col, pk and fk. fk points to main table's pk
-                                // we perform the join from the main table to the collection's table, so we need to reverse the primary and foreign key
-                                var targetTable = table.Clone();
-                                joins.Add(new Join() { Table = mainTable, ForeignKey = mainTable.PrimaryKey, TargetTable = targetTable, PrimaryKey = fk.FieldName });
-                            }
-                            else if (table.Type == typeof(ManyToManyAssignmentTable))
-                            {
-                                if (ignoreInManyToManyAssignment) continue;
-
-                                // join parent to assignment table
-                                joins.Add(new Join() { Table = mainTable, ForeignKey = mainTable.PrimaryKey, TargetTable = table, PrimaryKey = fk.FieldName });
-
-                                //find the table of the shared objects
-                                string targetTableName = table.Name.Split("_")[1];
-                                Table targetTable = tables.Where(t => t.Name == targetTableName).First();
-
-                                // join assignment table to shared objects
-                                joins.Add(new Join() { Table = table, PrimaryKey = targetTable.PrimaryKey, TargetTable = targetTable, ForeignKey =  targetTableName + Default.IdProprtyName });
-
-                                //make a recursive call in case the shared object has dependencies
-                                joins.AddRange(GetJoins(targetTable, tablesClone, targetTable, true));
-                            }
-                            else if(Types.HasCollectionOfType(mainTable.Type, table.Type))
-                            {
-                                joins.Add(new Join() { Table = mainTable, ForeignKey = mainTable.PrimaryKey, TargetTable = table, PrimaryKey = fk.FieldName });
-                                joins.AddRange(GetJoins(table, tablesClone, mainTable)); // get the dependencies of the object  
-                            }
-                        }
-                    }
-                }
-            }
-
-            return joins;//.GroupBy(j => j.TargetTable).Select(g => g.First());
-        }
-
         public static async Task SaveAsync(params object[] models)
         {
             await Task.Run(() => Save(models));
@@ -380,41 +313,26 @@ namespace EzMapper
                 if (!_types.Contains(model.GetType()))
                     throw new Exception($"object of type {model} is not registered");
 
-                List<Table> tables = SortTablesByForeignKeys(ModelParser.CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First())).ToList();
+                List<Table> tables = ModelParser.CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First()).ToList();
+                List<Table> sortedTables = StatementBuilder.SortTablesByForeignKeys(tables).ToList();
                 List<InsertStatement> insertStatements = new();
 
-                tables.ForEach(table => insertStatements.AddRange(StatementBuilder.TableToInsertStatements(table, model, tables.ToArray())));
+                sortedTables.ForEach(table => insertStatements.AddRange(StatementBuilder.TableToInsertStatements(table, model, sortedTables.ToArray())));
+
+                //insert statements in assignment tables should always go last
+                var assignmentInserts = insertStatements.Where(ins => ins.Table.Type == typeof(ManyToManyAssignmentTable)).ToList();
+                insertStatements.RemoveAll(ins => ins.Table.Type == typeof(ManyToManyAssignmentTable));
+                insertStatements.AddRange(assignmentInserts);
 
                 foreach (InsertStatement stmt in insertStatements)
                 {
-                    IEnumerable<DbParameter> paras = ModelParser.GetDbParams(stmt, tables, insertStatements, _db);
+                    IEnumerable<DbParameter> paras = ModelParser.GetDbParams(stmt, sortedTables, insertStatements, _db);
                     string sql = SqlStatementBuilder.CreateInsertStatement(stmt);
+                    Console.WriteLine(sql);
 
                     _db.ExecuteNonQuery(sql, paras.ToArray());
                 }
             }
         }
-
-        private static IEnumerable<Table> SortTablesByForeignKeys(IEnumerable<Table> tables)
-        {
-            List<Table> results = new();
-
-            foreach (Table table in tables)
-            {
-                foreach (Column column in table.Columns)
-                {
-                    if (column.IsForeignKey)
-                        results.AddRange(SortTablesByForeignKeys(tables.Where(t => t.Name == table.ForeignKeys.Where(fk => fk.FieldName == column.Name).First().TargetTable)));
-                }
-
-                results.Add(table);
-            }
-
-            return results.GroupBy(t => t.Name).Select(g => g.First());
-
-        }
-
     }
-
-    
 }

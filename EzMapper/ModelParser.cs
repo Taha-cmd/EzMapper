@@ -1,4 +1,5 @@
 ﻿using EzMapper.Attributes;
+using EzMapper.Database;
 using EzMapper.Models;
 using EzMapper.Reflection;
 using System;
@@ -11,17 +12,18 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("EzMapper.Tests")]
 
-namespace EzMapper.Database
+namespace EzMapper
 {
     class ModelParser
     {
-        public static string GetPrimaryKeyPropertyName(params PropertyInfo[] props)
+        public static string GetPrimaryKeyPropertyName(Type type, params PropertyInfo[] props)
         {
             Assertion.NotNull(props, nameof(props));
 
 
             // validate that primary key attribute is used once at most (0 or 1)
             var filteredPropsByAttribute = props.Where(prop => Types.HasAttribute<PrimaryKeyAttribute>(prop)).ToList();
+            PropertyInfo pkProp = null;
 
             if (filteredPropsByAttribute.Count > 1)
                 throw new Exception($"Primary Key attribute can be used on only one element!");
@@ -31,7 +33,12 @@ namespace EzMapper.Database
             //if one attribute is present, this property is the primary key
             if (filteredPropsByAttribute.Count == 1)
             {
-                primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
+                //if (filteredPropsByAttribute[0].DeclaringType != type)
+                //    primaryKeyPropertyName = filteredPropsByAttribute[0].DeclaringType.Name + Default.IdProprtyName;
+                //else
+                    primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
+
+                pkProp = filteredPropsByAttribute[0];
             }
             else if (filteredPropsByAttribute.Count == 0) // if no attribute is found, search for default name
             {
@@ -41,14 +48,27 @@ namespace EzMapper.Database
                 if (filteredPropsByName.Count == 0)
                     throw new Exception($"No candidate for primary key found. No Attribute nor ID Property found");
 
-                primaryKeyPropertyName = filteredPropsByName[0].Name;
+                //if (filteredPropsByName[0].DeclaringType != type)
+                //    primaryKeyPropertyName = filteredPropsByName[0].DeclaringType.Name + Default.IdProprtyName;
+                //else
+                    primaryKeyPropertyName = filteredPropsByName[0].Name;
+
+                pkProp = filteredPropsByName[0];
             }
 
             //check for datatype
-            if (props.Where(prop => prop.Name == primaryKeyPropertyName).First().PropertyType != typeof(int))
+            if (pkProp.PropertyType != typeof(int))
                 throw new Exception($"{primaryKeyPropertyName} is not an integer. Primary key should be an integer");
 
             return primaryKeyPropertyName;
+        }
+
+        public static string GetPkFieldName(Type type)
+        {
+            string pkPropertyName = GetPrimaryKeyPropertyName(type, type.GetProperties());
+            Type ownerType = Types.FindPropertyOwnerType(type, pkPropertyName);
+
+            return ownerType == type ? pkPropertyName : ownerType.Name + Default.IdProprtyName;
         }
 
         public static IEnumerable<DbParameter> GetDbParams(InsertStatement stmt, IEnumerable<Table> tables, IEnumerable<InsertStatement> insertStatements, IDatebase db)
@@ -79,7 +99,7 @@ namespace EzMapper.Database
 
                         if (stmt.Model is ExpandoObject expando)
                         {
-                            string pkPropertyName = GetPrimaryKeyPropertyName(possibleOwners.First().Model.GetType().GetProperties());
+                            string pkPropertyName = GetPrimaryKeyPropertyName(possibleOwners.First().Model.GetType(),possibleOwners.First().Model.GetType().GetProperties());
                             int ownerPKValue = (int)expando.Where(el => el.Key == Default.OwnerIdPropertyName).First().Value;
                             obj = possibleOwners.Where(ow => (int)ow.Model.GetType().GetProperty(pkPropertyName).GetValue(ow.Model) == ownerPKValue).First().Model;
                         }
@@ -94,7 +114,11 @@ namespace EzMapper.Database
 
                     if (obj is not null)
                     {
-                        var value = targetTable.Type.GetProperty(fk.TargetField).GetValue(obj);
+                        //if object has a base type, the property might be inherited
+                        string pkPropertyName = Types.HasParentModel(obj)
+                                ? fk.TargetField.Replace(obj.GetType().BaseType.Name, "")
+                                : fk.TargetField;
+                        var value = targetTable.Type.GetProperty(pkPropertyName).GetValue(obj);
 
                         paras.Add(db.Param(col.Name, value));
                     }
@@ -128,7 +152,7 @@ namespace EzMapper.Database
             return GetTableHierarchy(Activator.CreateInstance(type));
         }
 
-        private static IEnumerable<Table> GetTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null, Type type = null)
+        private static IEnumerable<Table> GetTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null, Type type = null, List<string> triggers = null)
         {
             List<Table> tables = new();
             string primaryKey = string.Empty;
@@ -151,12 +175,12 @@ namespace EzMapper.Database
             bool fk = false;
             if (!Types.HasParentModel(model))
             {
-                primaryKey = GetPrimaryKeyPropertyName(props.ToArray());
+                primaryKey = GetPrimaryKeyPropertyName(model.GetType(), props.ToArray());
             }
             else
             {
                 primaryKey = model.GetType().BaseType.Name + Default.IdProprtyName;
-                fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray())));
+                fks.Add(new ForeignKey(primaryKey, model.GetType().BaseType.Name, GetPrimaryKeyPropertyName(model.GetType().BaseType, model.GetType().BaseType.GetProperties().ToArray()), DeleteAction.Cascade));
                 fk = true;
             }
 
@@ -187,8 +211,8 @@ namespace EzMapper.Database
                             tableCols.Add(new Column($"{tableName}{Default.IdProprtyName}", true));// reference parent table
                             tableCols.Add(new Column($"{elementType.Name}{Default.IdProprtyName}", true)); // reference child table
 
-                            tableFks.Add(new ForeignKey($"{tableName}{Default.IdProprtyName}", model.GetType().Name, primaryKey));
-                            tableFks.Add(new ForeignKey($"{elementType.Name}{Default.IdProprtyName}", elementType.Name, GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray())));
+                            tableFks.Add(new ForeignKey($"{tableName}{Default.IdProprtyName}", model.GetType().Name, primaryKey, DeleteAction.NoAction));
+                            tableFks.Add(new ForeignKey($"{elementType.Name}{Default.IdProprtyName}", elementType.Name, GetPrimaryKeyPropertyName(elementType, elementType.GetProperties().ToArray()), DeleteAction.NoAction) );
 
                             tables.AddRange(GetTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}", typeof(ManyToManyAssignmentTable)));
 
@@ -198,8 +222,19 @@ namespace EzMapper.Database
                             // 1:n relationships
                             // check for element type again, recursive call for non primitves
 
-                            tableCols.Add(new Column($"{model.GetType().Name}{Default.IdProprtyName}", true)); ;
-                            tableFks.Add(new ForeignKey($"{model.GetType().Name}{Default.IdProprtyName}", model.GetType().Name, GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray())));
+                            tableCols.Add(new Column($"{model.GetType().Name}{Default.IdProprtyName}", true));
+
+                            //if the primary key is inherited, it will have a different name
+                            string fkTargetField = Types.HasParentModel(model) 
+                                ? model.GetType().BaseType.Name + Default.IdProprtyName 
+                                : GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties().ToArray());
+
+
+                            var action = Types.HasAttribute<OnDeleteAttribute>(prop)
+                                ? prop.GetCustomAttribute<OnDeleteAttribute>().Action
+                                : throw new Exception($"{prop.Name} of class {prop.DeclaringType} does not have an OnDelete attribute");
+
+                            tableFks.Add(new ForeignKey($"{model.GetType().Name}{Default.IdProprtyName}", model.GetType().Name, fkTargetField, action));
 
                             if (Types.IsPrimitive(elementType))
                             {
@@ -218,11 +253,28 @@ namespace EzMapper.Database
                     }
                     else
                     {
-                        // 1:1 relationships
-                        tables.AddRange(CreateTables(prop.PropertyType));
+                        var action = Types.HasAttribute<OnDeleteAttribute>(prop)
+                            ? prop.GetCustomAttribute<OnDeleteAttribute>().Action
+                            : throw new Exception($"{prop.Name} of class {prop.DeclaringType} does not have a delete action attribute");
+
+                        string deleteTrigger = null;
+
+                        if(action == DeleteAction.Cascade)
+                        {
+                            deleteTrigger = $"CREATE TRIGGER DROP_{prop.PropertyType.Name}_WHEN_{model.GetType().Name}_IS_DELETED ";
+                            deleteTrigger += $"AFTER DELETE ON {model.GetType().Name} BEGIN DELETE FROM {prop.PropertyType.Name} WHERE ";
+                            deleteTrigger += $"{prop.PropertyType.Name}.{GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties())} ";
+                            deleteTrigger += $"= old.{prop.Name}{Default.IdProprtyName}; END;";
+
+                        }
+
+                        /*List<string>*/ triggers = new() { deleteTrigger };
+
+                        object obj = Activator.CreateInstance(prop.PropertyType);
+                        tables.AddRange(GetTableHierarchy(obj, null, null,null,null, null));
 
                         columns.Add(new Column($"{prop.Name}{Default.IdProprtyName}", true));
-                        fks.Add(new ForeignKey($"{prop.Name}{Default.IdProprtyName}", prop.PropertyType.Name, GetPrimaryKeyPropertyName(prop.PropertyType.GetProperties().ToArray())));
+                        fks.Add(new ForeignKey($"{prop.Name}{Default.IdProprtyName}", prop.PropertyType.Name, GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties().ToArray()), action));
                     }
 
                     continue;
@@ -243,10 +295,13 @@ namespace EzMapper.Database
             }
 
         TableBulding:
-            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks, Type = type });
+            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks, Type = type, Triggers = triggers });
 
 
             return tables;
         }
+
+
+
     }
 }
