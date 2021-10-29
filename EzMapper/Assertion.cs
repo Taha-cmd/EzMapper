@@ -1,12 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EzMapper
 {
-    static class Assert
+    static class Assertion
     {
         public static void NotNull<T>(T obj, string name = "object") where T : class
         {

@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp.Models
 {
-    public class Phone : IModel
+    public class AluUnit
     {
         public int ID { get; set; }
-        public string Brand { get; set; }
+        public string PlaceHolder { get; set; }
 
         [OnDelete(DeleteAction.Cascade)]
-        public Cpu CPU { get; set; }
+        public string[] ListOfStuff { get; set; }
     }
 }

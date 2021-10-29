@@ -1,24 +1,34 @@
-﻿using System;
-using System.Data.SQLite;
-using System.Data.SQLite.Generic;
-using System.Data.SqlTypes;
-using System.Data.Common;
-using System.Linq;
-using System.Text;
-using System.Reflection;
-using EzMapper.Attributes;
+﻿using EzMapper.Attributes;
+using EzMapper.Database;
+using EzMapper.Models;
+using EzMapper.Reflection;
+using System;
 using System.Collections.Generic;
 using System.Collections;
+using System.Data.Common;
+using System.Data.SQLite;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace EzMapper
 {
     public class EzMapper
     {
 
-        //TODO: implement m:n
-
         private static readonly List<Type> _types = new();
-        private static bool _isBuilt = false;
+        private static bool _isBuilt = File.Exists(Default.DbName);
+        private static IDatebase _db;
+
+        static EzMapper()
+        {
+//#if DEBUG
+//            File.Delete(Default.DbName);
+//#endif
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}");
+        }
         private EzMapper() { }
         public static void Register<T>() where T : class
         {
@@ -28,337 +38,301 @@ namespace EzMapper
             _types.Add(typeof(T));
         }
 
+        public static void Register(params Type[] types)
+        {
+            if (_isBuilt)
+                throw new Exception("The database has allready benn built. You can't register more types");
+
+            Assertion.That(types.All(t => t is not null), "type can not be null");
+
+            _types.AddRange(types);
+        }
+
         public static void Build()
         {
+            
             if (_isBuilt) return;
 
+            SQLiteConnection.CreateFile(Default.DbName + ";Version=3");
+
+            _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}; Foreign Keys=True; Version=3;");
             List<Table> tables = new();
-            List<string> createTableStatements = new();
 
-            _types.ForEach(type => tables.AddRange(CreateTables(type)));
+            _types.ForEach(type => tables.AddRange(ModelParser.CreateTables(type)));
+            tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList(); // get rid of duplicate tables
 
-            // in case the user registers a model that is contained in a list within another model,
-            // then this model will be created twice (the second time being when the parent model is registered)
-            // and the foreign key will not be set correctly
-            // this is why we group tables by name (models that were registered more than once)
-            // and take the one with the most columns (the correct one with the foreign key)
-            tables = tables
-                        .GroupBy(table => table.Name)
-                        .Select(g => g.OrderByDescending(table => table.Columns.Count))
-                        .Select(g => g.First())
-                        .OrderByDescending(table => table.ForeignKeys.Count == 0)
-                        .ToList(); //https://stackoverflow.com/questions/489258/linqs-distinct-on-a-particular-property
-
-
-            // the last step will ruin the order and cause tables with foreign keys to come before their parent tables
-            // take each table, and find all other tables that reference it (basically find all child tables to a parent table)
-            // and append them to the list
-            var tmp = new List<Table>();
-            foreach (var table in tables)
-            {
-                tmp.AddRange(
-                    tables.Where(
-                        t => t.ForeignKeys.Where(fk => fk.TargetTable == table.Name).Count() > 0
-                    )
-                );
-            }
-
-            tables.AddRange(tmp);
-
-            // now we have duplicates, the tables at the end are the correct ones
-            tables.Reverse();
-            tables = tables.GroupBy(t => t.Name).Select(g => g.First()).ToList();
-            tables.Reverse();
-
-
-            var builder = new StringBuilder();
-
-            tables.ForEach(table =>
-            {
-                builder.Append($"CREATE TABLE IF NOT EXISTS {table.Name} (");
-                table.Columns.ForEach(col =>
-                {
-                    builder.Append($" {col.Name} {col.Type} ");
-                    col.Constrains.ForEach(constraint => builder.Append($"{constraint} "));
-                    builder.Append(',');
-                });
-
-                table.ForeignKeys.ForEach(fk =>
-                {
-                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}),");
-                });
-
-                builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
-                builder.Append(");");
-            });
-
-
-            foreach (string statement in builder.ToString().Split(';'))
+            foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
                 Console.WriteLine(statement);
+                _db.ExecuteNonQuery(statement);
             }
 
+            foreach(var table in tables)
+            {
+                if (table.Triggers is null) continue;
+
+                foreach(string triggerSql in table.Triggers)
+                {
+                    if(!string.IsNullOrEmpty(triggerSql))
+                    {
+                        Console.WriteLine(triggerSql);
+                        _db.ExecuteNonQuery(triggerSql);
+                    }
+                        
+                }
+            }
             _isBuilt = true;
         }
 
-        public static void TestCrud(object model)
+
+        public static int Delete<T>(int id)
         {
-            var props = model.GetType().GetProperties().ToList();
-            //props.ForEach(prop => Console.WriteLine($"{prop.PropertyType} {prop.Name} {{ {prop.GetGetMethod()}; {prop.GetSetMethod()}; }}"));
+            //in case of inheritance, delete parent
+            var tables = ModelParser.CreateTables(typeof(T));
+            var table = tables.Where(t => t.Name == typeof(T).Name).First();
 
-            var select = new StringBuilder($"SELECT * FROM {model.GetType().Name};");
-            var insret = new StringBuilder($"INSERT INTO {model.GetType().Name} (");
-            
+            Column pk = table.Columns.Where(col => col.IsPrimaryKey).First();
 
-            props.ForEach(prop => insret.Append(prop.Name + ","));
-            insret.Replace(",", "", insret.Length - 1, 1); // get rid of trailing comma
-            insret.Append(") VALUES (");
-
-            props.ForEach(prop => insret.Append($"@{prop.Name},"));
-            insret.Replace(",", "", insret.Length - 1, 1); // get rid of trailing comma
-            insret.Append(");");
-
-
-            var update = new StringBuilder($"UPDATE {model.GetType().Name} SET ");
-            props.Where(prop => prop.Name != "ID").ToList().ForEach(prop => update.Append($"{prop.Name}=@{prop.Name},"));
-            update.Replace(",", "", update.Length - 1, 1); // get rid of trailing comma
-            update.Append(" WHERE ID=@ID;");
-
-            var delete = new StringBuilder($"DELETE FROM {model.GetType().Name} WHERE ID=@ID;");
-
-            Console.WriteLine(select);
-            Console.WriteLine(insret);
-            Console.WriteLine(update);
-            Console.WriteLine(delete);
-
-        }
-
-
-        private static bool HasParentModel(object model)
-        {
-            return model.GetType().BaseType.FullName != typeof(object).FullName;
-        }
-
-        private static bool IsPrimitive(Type t)
-        {
-            bool isPrimitiveType = t.IsPrimitive || t.IsValueType || (t == typeof(string));
-            return isPrimitiveType;
-        }
-
-        public static bool IsPrimitive(object obj, string propertyName)
-        {
-            if (obj is null)
+            //this will find the the root parent in case of inheritance
+            while (pk.IsForeignKey)
             {
-                return false;
+                var fk = table.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
+                var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
+
+                table = targetTable;
+                pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
             }
 
-            Type t = obj.GetType().GetProperty(propertyName).PropertyType;
-
-            if(IsNullable(obj, propertyName))
-            {
-                if (Nullable.GetUnderlyingType(t) is not null)
-                    return IsPrimitive(Nullable.GetUnderlyingType(t));
-            }
-                
-            return IsPrimitive(t);
+            DeleteStatement stmt = new() { Table = table, ID = id };
+            string sql = SqlStatementBuilder.CreateDeleteStatement(stmt);
+            return _db.ExecuteNonQuery(sql, _db.Param("p0", id));
         }
 
-        public static bool IsCollection(Type t)
+        public static T Get<T>(int id)
         {
-            if (t == typeof(string))
-                return false;
+            string pkFieldName = ModelParser.GetPkFieldName(typeof(T));
 
-            return typeof(IList).IsAssignableFrom(t) || t.IsArray;
+            return RecursiveGet<T>(new WhereClause(pkFieldName, "=", id.ToString())).FirstOrDefault();
         }
 
-        public static bool IsNullable(object model, string propertyName)
+        public static async Task<T> GetTAsync<T>(int id)
         {
-            if (model == null) return true; // obvious
-            PropertyInfo prop = model.GetType().GetProperty(propertyName);
-
-            if (prop.PropertyType == typeof(string))
-            {
-                if (HasAttribute<NotNullAttribute>(prop))
-                    return false;
-            }
-
-            // https://stackoverflow.com/questions/374651/how-to-check-if-an-object-is-nullable/4131871
-
-            Type type = prop.PropertyType;
-            if (!type.IsValueType) return true; // ref-type
-            if (Nullable.GetUnderlyingType(type) != null) return true; // Nullable<T>
-            return false; // value-type
+            return await Task.Run(() => Get<T>(id));
         }
 
-        public static Type GetElementType(Type type) // returns the element type from a collection type (arrays and lists)
+        public static IEnumerable<T> Get<T>()
         {
-            if (type.IsArray)
-                return type.GetElementType();
+            if (!_types.Contains(typeof(T)))
+                throw new Exception($"object of type {typeof(T)} is not registered");
 
-            return type.GenericTypeArguments[0];
+            return RecursiveGet<T>();
+
         }
 
-        private static IEnumerable<Table> CreateTables(Type type)
+        public static async Task<IEnumerable<T>> GetTAsync<T>()
         {
-            return CreateTableHierarchy(Activator.CreateInstance(type));
+            return await Task.Run(() => Get<T>());
         }
-        private static IEnumerable<Table> CreateTableHierarchy(object model, List<Column> cols = null, List<ForeignKey> foreignKeys = null, string tableName = null)
+
+
+
+        private static IEnumerable<T> RecursiveGet<T>(WhereClause whereClause = null)
         {
-            List<Table> tables = new();
-            string primaryKey = string.Empty;
-            var props = model?.GetType().GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance).ToList();
-            tableName ??= model.GetType().Name;
+            var stmt = StatementBuilder.CreateSingleSelectStatement<T>();
+            string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt, whereClause);
 
-            var fks = foreignKeys is null ? new List<ForeignKey>() : foreignKeys;
-            var columns = cols is null ? new List<Column>() : cols;
+            return _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
+        }
+        private static T ObjectReader<T>(DbDataReader reader)
+        {
+            T model = Activator.CreateInstance<T>();
+            var props = model.GetType().GetProperties();
 
-            if (model is null)
-                goto TableBulding;
-
-            if (HasParentModel(model))
+            foreach (var prop in props)
             {
-                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(model.GetType().BaseType)));
-            }
+                object value;
 
-            if (!HasParentModel(model))
-            {
-                primaryKey = GetPrimaryKeyPropertyName(props.ToArray());
-            }
-            else
-            {
-                primaryKey = model.GetType().BaseType.Name + "ID";
-                fks.Add(new ForeignKey() { FieldName = primaryKey, TargetTable = model.GetType().BaseType.Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().BaseType.GetProperties().ToArray()) });
-            }
-
-            columns.Add(new Column() { Name = primaryKey, Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-
-            foreach(var prop in props?.Where(prop => prop.Name != primaryKey))
-            {
-                if (!IsPrimitive(model, prop.Name))
+                if (Types.IsPrimitive(prop.PropertyType)) // read all primitive values (including inherited ones)
                 {
-                    //a non primitive could be an object or a collection
+                    // get primitive values
+                    string columnName = $"{prop.DeclaringType.Name}_{prop.Name}";
+                    int ordinal = reader.GetOrdinal(columnName);
+                    value = reader.GetValue(ordinal);
 
-                    if(IsCollection(prop.PropertyType))
+                    value = Convert.ChangeType(value, prop.PropertyType);
+                    prop.SetValue(model, value);
+                }
+                else if (!Types.IsPrimitive(prop.PropertyType) && !Types.IsCollection(prop.PropertyType)) // read nested objects (1:1)
+                {
+                    // when the property is another object, we save a foreign key in the main table
+                    string fkPropertyName = $"{prop.Name}{Default.IdProprtyName}";
+                    string columnName = $"{prop.DeclaringType.Name}_{fkPropertyName}";
+                    int ordinal = reader.GetOrdinal(columnName);
+                    object fkValue = reader.GetValue(ordinal);
+                    if (fkValue == DBNull.Value) continue;
+
+                    fkValue = Convert.ChangeType(fkValue, typeof(int));
+
+                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties());
+                    string pk = $"{prop.PropertyType.Name}_{targetPkPropertyName}";
+
+                    var where = new WhereClause(pk, "=", fkValue.ToString());
+
+                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", prop.PropertyType, where)).FirstOrDefault();
+                    prop.SetValue(model, value);
+                }
+                else if(Types.IsCollection(prop.PropertyType)) // collections
+                {
+                    Type elementType = Types.GetElementType(prop.PropertyType);
+
+                    if ( Types.IsPrimitive( elementType) ) // 1:n of primitves
                     {
-                        Type elementType = GetElementType(prop.PropertyType);
-                        var tableCols = new List<Column>();
-                        var tableFks = new List<ForeignKey>();
+                        //a primitve table has 3 cols: pk, fk to owner and the value
 
-                        if (HasAttribute<SharedAttribute>(prop))
+                        //find table and foreign key names
+                        string tableName = prop.DeclaringType.Name + prop.Name;
+                        string fkName = prop.DeclaringType.Name + Default.IdProprtyName;
+
+                        // get primary key value
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T), typeof(T).GetProperties());
+                        string pkColumnName = $"{prop.DeclaringType.Name}_{pkPropertyName}";
+                        int ordinal = reader.GetOrdinal(pkColumnName);
+
+                        object pKvalue = Convert.ChangeType( reader.GetValue(ordinal), typeof(int) );
+                        string rawSql = $"SELECT {prop.Name} FROM {tableName} WHERE {fkName} = @fkvalue";
+
+                        //TODO: refactor collection management code
+
+                        //this will return IEnumerable<object>
+                        value = _db.ExecuteQuery(rawSql, (innerReader) => Convert.ChangeType(innerReader.GetValue(innerReader.GetOrdinal(prop.Name)), elementType), _db.Param("fkvalue", pKvalue));
+
+                        //IList is common interface for lists and arrays
+                        IList values = (IList)value;
+                        IList collectionValue = (IList)Activator.CreateInstance(prop.PropertyType, values.Count);
+
+                        bool isList = collectionValue.GetType().IsGenericType;
+
+                        //https://docs.microsoft.com/en-us/dotnet/api/system.array?view=net-5.0
+                        // calling Add method on an array as an IList always throws notsupportedexception
+                        for (int i = 0; i < values.Count; i++)
                         {
-                            // m:n relathionship
-                            // when we have m:n relationships, both types are non primitives
 
-                            // create table for the new object
-                            tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType)));
-
-                            // create assignment table (id, fk1, fk2)
-                            tableCols.Add(new Column() { Name = $"ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-                            tableCols.Add(new Column() { Name = $"{tableName}ID" }); // reference parent table
-                            tableCols.Add(new Column() { Name = $"{elementType.Name}ID" }); // reference child table
-
-                            tableFks.Add(new ForeignKey() { FieldName = $"{tableName}ID", TargetTable = model.GetType().Name, TargetField = primaryKey });
-                            tableFks.Add(new ForeignKey() { FieldName = $"{elementType.Name}ID", TargetTable = elementType.Name, TargetField = GetPrimaryKeyPropertyName(elementType.GetProperties().ToArray()) });
-
-                            tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, $"{tableName}_{elementType.Name}"));
-
-                        }
-                        else
-                        {
-                            // 1:n relationships
-                            // check for element type again, recursive call for non primitves
-   
-                            tableCols.Add(new Column() { Name = $"{model.GetType().Name}ID" });
-                            tableFks.Add(new ForeignKey() { FieldName = $"{model.GetType().Name}ID", TargetTable = model.GetType().Name, TargetField = GetPrimaryKeyPropertyName(model.GetType().GetProperties().ToArray()) });
-
-                            if (IsPrimitive(elementType))
+                            if(isList)
                             {
-
-                                tableCols.Add(new Column() { Name = "ID", Constrains = new string[] { "PRIMARY KEY" }.ToList() });
-                                tableCols.Add(new Column() { Name = prop.Name });
-
-                                tables.AddRange(CreateTableHierarchy(null, tableCols, tableFks, model.GetType().Name + prop.Name));
+                                collectionValue.Add(values[i]);
+                                continue;
                             }
-                            else
-                            {
-                                tables.AddRange(CreateTableHierarchy(Activator.CreateInstance(elementType), tableCols, tableFks));
-                            }
+                            
+                            //array
+                            collectionValue[i] = values[i];
                         }
 
+                        prop.SetValue(model, collectionValue);
                     }
                     else
                     {
-                        // 1:1 relationships
-                        tables.AddRange(CreateTableHierarchy(prop.GetValue(model)));
+                        // find pk and pk value of owner
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(elementType,props);
 
-                        columns.Add(new Column() { Name = $"{prop.Name}ID" });
-                        fks.Add(new ForeignKey() { FieldName = $"{prop.Name}ID", TargetTable = prop.Name, TargetField = GetPrimaryKeyPropertyName(prop.GetValue(model).GetType().GetProperties().ToArray()) });
+                        //find the pk property so we can find thedeclaring type of primary key (in case we are dealing with inheritance)
+                        var pkProp = props.Where(p => p.Name == pkPropertyName).First();
+
+                        string pkColumnName = $"{pkProp.DeclaringType.Name}_{pkPropertyName}";
+                        int pkOrdinal = reader.GetOrdinal(pkColumnName);
+
+                        object pKvalue = Convert.ChangeType(reader.GetValue(pkOrdinal), typeof(int));
+
+                        if (Types.HasAttribute<SharedAttribute>(prop)) // m:n
+                        {
+                            // get the foriegn key names of the assignment table
+
+                            string childTableName = elementType.Name;
+                            string childTablePkName = ModelParser.GetPrimaryKeyPropertyName(elementType,elementType.GetProperties());
+                            string assignmentTableName = model.GetType().Name + "_" + elementType.Name;
+                            string fkToOwnerColumnName = model.GetType().Name + Default.IdProprtyName;
+                            string fkToChildColumnName = elementType.Name + Default.IdProprtyName;
+
+                            // select the ids of the child objects from the assignment table
+                            var rawSql = $"SELECT {fkToChildColumnName} FROM {assignmentTableName} WHERE {fkToOwnerColumnName} = @fkvalue";
+                            IEnumerable<int> ids = _db.ExecuteQuery(rawSql, innerReader => Convert.ToInt32(innerReader.GetValue(0)), _db.Param("fkvalue", pKvalue.ToString()));
+
+
+                            IList list = (IList)CollectionsHelper.CreateGenericList(elementType);
+
+                            foreach(int id in ids)
+                            {
+                                var where = new WhereClause(childTablePkName, "=", id.ToString());
+                                value = Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", elementType, where);
+                                list.Add(((IEnumerable<object>)value).FirstOrDefault());
+                            }
+
+                            if(prop.PropertyType.IsArray)
+                            {
+                                IList arr = (IList)Activator.CreateInstance(prop.PropertyType, list.Count);
+
+                                for (int i = 0; i < ids.Count(); i++)
+                                    arr[i] = list[i];
+
+                                list = arr;
+                            }
+
+                            prop.SetValue(model, list);
+                        }
+                        else // 1:n complex
+                        {
+
+                            //find fk name in child table
+                            string fkColumnName = $"{prop.DeclaringType.Name}{Default.IdProprtyName}";
+
+                            var where = new WhereClause(fkColumnName, "=", pKvalue.ToString());
+
+                            value = (IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", elementType, where);
+                            prop.SetValue(model, value);
+                        }
                     }
-
-                    continue;
                 }
-
-                var col = new Column() { Name = prop.Name};
-                
-                if(HasAttribute<NotNullAttribute>(prop) || !IsNullable(model, prop.Name))
-                    col.Constrains.Add("NOT NULL");
-
-                if (HasAttribute<UniqueAttribute>(prop))
-                    col.Constrains.Add("UNIQUE");
-
-                if (HasAttribute<DefaultMemberAttribute>(prop))
-                    col.Constrains.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
-
-                columns.Add(col);
             }
 
-        TableBulding:
-            tables.Add(new Table() { Name = tableName, Columns = columns, ForeignKeys = fks });
-
-            return tables;
+            return model;
         }
 
-        public static bool HasAttribute<T>(PropertyInfo prop) where T : Attribute
+        public static async Task SaveAsync(params object[] models)
         {
-            return prop.CustomAttributes.Where(attr => attr.AttributeType.Name == typeof(T).Name).ToArray().Length == 1;
+            await Task.Run(() => Save(models));
         }
 
-        public static string GetPrimaryKeyPropertyName(params PropertyInfo[] props)
+        public static void Save(params object[] models)
         {
-            Assert.NotNull(props, nameof(props));
+            if (!_isBuilt)
+                throw new Exception("You can't save objects yet, the database has not been built");
 
-
-            // validate that primary key attribute is used once at most (0 or 1)
-            var filteredPropsByAttribute = props.Where(prop => HasAttribute<PrimaryKeyAttribute>(prop)).ToList();
-
-            if (filteredPropsByAttribute.Count > 1)
-                throw new Exception($"Primary Key attribute can be used on only one element!");
-
-            string primaryKeyPropertyName = string.Empty;
-
-            //if one attribute is present, this property is the primary key
-            if(filteredPropsByAttribute.Count == 1)
+            foreach(object model in models)
             {
-                primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
+                Assertion.NotNull(model, nameof(model));
+
+                if (!_types.Contains(model.GetType()))
+                    throw new Exception($"object of type {model} is not registered");
+
+                List<Table> tables = ModelParser.CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First()).ToList();
+                List<Table> sortedTables = StatementBuilder.SortTablesByForeignKeys(tables).ToList();
+                List<InsertStatement> insertStatements = new();
+
+                sortedTables.ForEach(table => insertStatements.AddRange(StatementBuilder.TableToInsertStatements(table, model, sortedTables.ToArray())));
+
+                //insert statements in assignment tables should always go last
+                var assignmentInserts = insertStatements.Where(ins => ins.Table.Type == typeof(ManyToManyAssignmentTable)).ToList();
+                insertStatements.RemoveAll(ins => ins.Table.Type == typeof(ManyToManyAssignmentTable));
+                insertStatements.AddRange(assignmentInserts);
+
+                foreach (InsertStatement stmt in insertStatements)
+                {
+                    IEnumerable<DbParameter> paras = ModelParser.GetDbParams(stmt, sortedTables, insertStatements, _db);
+                    string sql = SqlStatementBuilder.CreateInsertStatement(stmt);
+                    Console.WriteLine(sql);
+
+                    _db.ExecuteNonQuery(sql, paras.ToArray());
+                }
             }
-            else if(filteredPropsByAttribute.Count == 0) // if no attribute is found, search for default name
-            {
-                var filteredPropsByName = props.Where(prop => prop.Name.ToUpper() == "ID").ToList();
-
-                //no key found
-                if (filteredPropsByName.Count == 0)
-                    throw new Exception($"No candidate for primary key found. No Attribute nor ID Property found");
-
-                primaryKeyPropertyName = filteredPropsByName[0].Name;
-            }
-
-            //check for datatype
-            if (props.Where(prop => prop.Name == primaryKeyPropertyName).First().PropertyType != typeof(int))
-                throw new Exception($"{primaryKeyPropertyName} is not an integer. Primary key should be an integer");
-
-            return primaryKeyPropertyName;
         }
     }
-
-    
 }

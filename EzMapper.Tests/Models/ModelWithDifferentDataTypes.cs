@@ -12,7 +12,7 @@ namespace EzMapper.Tests.Models
     {
         public int x { get; set; } = 3;
         public int? y { get; set; } = 4;
-        
+
         [NotNull]
         public string z { get; set; } = "we";
 
@@ -22,6 +22,9 @@ namespace EzMapper.Tests.Models
         [NotNull]
         public object obj { get; set; } = new Student();
 
+        public List<ModelWithNoAttribute> models {get;set;}
+        public List<string> strings { get; set; }
+        public List<int> integers { get; set; }
 
         public object o2 { get; set; } = 3;
         public object l { get; set; } = null;
