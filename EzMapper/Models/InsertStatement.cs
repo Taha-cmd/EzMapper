@@ -11,6 +11,6 @@ namespace EzMapper.Models
     {
         public object Model { get; set; } // actual data
         public Table Table { get; set; } // table structure
-        public bool Replaceable { get; set; } = false;
+        public bool Ignoreable { get; set; } = false; // ignore the record if allready exists
     }
 }

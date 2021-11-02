@@ -4,6 +4,7 @@ using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using EzMapper.Attributes;
 using EzMapper.ConsoleApp.Models;
 
@@ -11,7 +12,7 @@ namespace EzMapper.ConsoleApp
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             File.Delete("db.sqlite");
 
@@ -74,16 +75,32 @@ namespace EzMapper.ConsoleApp
                 Courses = new List<Course>() {  c2, c3 }
             };
 
-            EzMapper.Save(student, teacher1, teacher2);
+            await EzMapper.SaveAsync(student, teacher1, teacher2);
 
-            var students = EzMapper.Get<Student>();
+            var students = await EzMapper.GetAsync<Student>();
             var teachers = EzMapper.Get<Teacher>();
 
             var John = EzMapper.Get<Student>(1);
             var Jane = EzMapper.Get<Teacher>(2);
-            var Jack = EzMapper.Get<Teacher>(3);
+            var Jack = await EzMapper.GetAsync<Teacher>(3);
 
-            int affectedRows = EzMapper.Delete<Student>(1);
+            var jane2 = EzMapper.Get<Teacher>().Where(t => t.ID == 2).FirstOrDefault();
+
+            //EzMapper.Delete(John);
+
+            John.Phones.Add(new Phone() { Brand = "Xiaomi", ID = 5, CPU = new Cpu() { Brand = "xiaomiCpu", ID = 15 } });
+            John.School = "Fh Technikum";
+            John.Car = new Car() { Brand = "Tesla", ModelNumber = 4 };
+            John.Numbers.Add(500);
+
+            Jack.Car = new Car() { Brand = "VW Golf", ModelNumber = 20 };
+            
+
+            EzMapper.Update(John, Jack);
+
+            John = EzMapper.Get<Student>(1);
+
+            //int affectedRows = EzMapper.Delete<Student>(1);
         }
 
     }

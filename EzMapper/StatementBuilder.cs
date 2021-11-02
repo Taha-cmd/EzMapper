@@ -49,7 +49,7 @@ namespace EzMapper
                     if(Types.IsCollectionOfTypeShared(model, table.Type))
                     {
                         //if the collection is shared, we assume that we might insert duplicates, so set the replaceable flag
-                        tmpStatements.ForEach(stmt => stmt.Replaceable = true);
+                        tmpStatements.ForEach(stmt => stmt.Ignoreable = true);
 
                         // find table
                         Table assignmentTable = tables.Where(t => t.Name == $"{model.GetType().Name}_{table.Name}").First();
@@ -112,14 +112,13 @@ namespace EzMapper
 
                         foreach (var primitve in collection)
                         {
+                            //TODO: insert all in one statement
                             var obj = new ExpandoObject() as IDictionary<string, object>;
                             obj.Add(targetCollectionPropertyName, primitve);
                             obj.Add(Default.OwnerIdPropertyName, owner.GetType().GetProperty(targetTable.PrimaryKey).GetValue(owner));
                             insertStatements.Add(CreateInsertStatement(table, obj));
                         }
                     }
-
-
                 }
                 else if(!Types.IsPrimitive(table.Type) && !Types.IsCollection(table.Type))// object (1:1)
                 {

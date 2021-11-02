@@ -2,7 +2,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 
@@ -214,7 +213,10 @@ namespace EzMapper.Reflection
 
         public static object InvokeGenericMethod(Type classType, object instance, string methodName, Type typeArugment, params object[] arguments)
         {
-            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public); // get private methods
+            
+            Type[] types = arguments.Select(arg => arg.GetType()).ToArray();
+            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Standard, types, null); // get private methods also
+            //var methodInfo = 
             var genericMethodInfo = methodInfo.MakeGenericMethod(typeArugment);
             return genericMethodInfo.Invoke(instance, arguments);
         }

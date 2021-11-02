@@ -25,7 +25,7 @@ namespace EzMapper.Database
 
                 table.ForeignKeys.ForEach(fk =>
                 {
-                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}) ON DELETE {fk.Action.Value()},");
+                    builder.Append($" FOREIGN KEY({fk.FieldName}) REFERENCES {fk.TargetTable}({fk.TargetField}) ON DELETE {fk.DeleteAction.Value()} ON UPDATE {fk.UpdateAction.Value()}");
                 });
 
                 builder.Replace(",", "", builder.Length - 1, 1); // get rid of trailing comma
@@ -39,8 +39,8 @@ namespace EzMapper.Database
         {
             var builder = new StringBuilder();
 
-            if (insertStatement.Replaceable)
-                builder.Append($"INSERT OR REPLACE INTO {insertStatement.Table.Name} (");
+            if (insertStatement.Ignoreable)
+                builder.Append($"INSERT OR IGNORE INTO {insertStatement.Table.Name} (");
             else
                 builder.Append($"INSERT INTO {insertStatement.Table.Name} (");
 

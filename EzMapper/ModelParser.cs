@@ -33,11 +33,7 @@ namespace EzMapper
             //if one attribute is present, this property is the primary key
             if (filteredPropsByAttribute.Count == 1)
             {
-                //if (filteredPropsByAttribute[0].DeclaringType != type)
-                //    primaryKeyPropertyName = filteredPropsByAttribute[0].DeclaringType.Name + Default.IdProprtyName;
-                //else
-                    primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
-
+                primaryKeyPropertyName = filteredPropsByAttribute[0].Name;
                 pkProp = filteredPropsByAttribute[0];
             }
             else if (filteredPropsByAttribute.Count == 0) // if no attribute is found, search for default name
@@ -48,11 +44,8 @@ namespace EzMapper
                 if (filteredPropsByName.Count == 0)
                     throw new Exception($"No candidate for primary key found. No Attribute nor ID Property found");
 
-                //if (filteredPropsByName[0].DeclaringType != type)
-                //    primaryKeyPropertyName = filteredPropsByName[0].DeclaringType.Name + Default.IdProprtyName;
-                //else
-                    primaryKeyPropertyName = filteredPropsByName[0].Name;
 
+                primaryKeyPropertyName = filteredPropsByName[0].Name;
                 pkProp = filteredPropsByName[0];
             }
 
@@ -73,6 +66,7 @@ namespace EzMapper
 
         public static IEnumerable<DbParameter> GetDbParams(InsertStatement stmt, IEnumerable<Table> tables, IEnumerable<InsertStatement> insertStatements, IDatebase db)
         {
+            //TODO: optimize 1:n of primitves with one insert statement instead of a statement pro value
             List<DbParameter> paras = new();
 
             foreach (Column col in stmt.Table.Columns)
@@ -80,7 +74,6 @@ namespace EzMapper
 
                 if (col.IsForeignKey && stmt.Table.Type != typeof(ManyToManyAssignmentTable))
                 {
-
                     var fk = stmt.Table.ForeignKeys.Where(fk => fk.FieldName == col.Name).First(); // find the foriegn key
                     var targetTable = tables.Where(t => t.Name == fk.TargetTable).First(); // find the target table
 
@@ -107,9 +100,6 @@ namespace EzMapper
                         {
                             obj = possibleOwners.First().Model;
                         }
-
-
-
                     }
 
                     if (obj is not null)
@@ -126,7 +116,6 @@ namespace EzMapper
                     {
                         col.Ignored = true;
                     }
-
                 }
                 else
                 {
@@ -251,7 +240,7 @@ namespace EzMapper
                         }
 
                     }
-                    else
+                    else // 1:1
                     {
                         var action = Types.HasAttribute<OnDeleteAttribute>(prop)
                             ? prop.GetCustomAttribute<OnDeleteAttribute>().Action
@@ -261,7 +250,7 @@ namespace EzMapper
 
                         if(action == DeleteAction.Cascade)
                         {
-                            deleteTrigger = $"CREATE TRIGGER DROP_{prop.PropertyType.Name}_WHEN_{model.GetType().Name}_IS_DELETED ";
+                            deleteTrigger = $"CREATE TRIGGER DELETE_{prop.PropertyType.Name}_WHEN_{model.GetType().Name}_IS_DELETED ";
                             deleteTrigger += $"AFTER DELETE ON {model.GetType().Name} BEGIN DELETE FROM {prop.PropertyType.Name} WHERE ";
                             deleteTrigger += $"{prop.PropertyType.Name}.{GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties())} ";
                             deleteTrigger += $"= old.{prop.Name}{Default.IdProprtyName}; END;";
@@ -273,8 +262,9 @@ namespace EzMapper
                         object obj = Activator.CreateInstance(prop.PropertyType);
                         tables.AddRange(GetTableHierarchy(obj, null, null,null,null, null));
 
+                        //make col unique?
                         columns.Add(new Column($"{prop.Name}{Default.IdProprtyName}", true));
-                        fks.Add(new ForeignKey($"{prop.Name}{Default.IdProprtyName}", prop.PropertyType.Name, GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties().ToArray()), action));
+                        fks.Add(new ForeignKey($"{prop.Name}{Default.IdProprtyName}", prop.PropertyType.Name, GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties().ToArray()), DeleteAction.NoAction));
                     }
 
                     continue;
@@ -291,6 +281,7 @@ namespace EzMapper
                 if (Types.HasAttribute<DefaultValueAttribute>(prop))
                     col.Constraints.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
 
+                //if (col.IsForeignKey) col.Constraints.Add("ON UPDATE CASCADE");
                 columns.Add(col);
             }
 

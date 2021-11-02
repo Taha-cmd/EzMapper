@@ -32,17 +32,14 @@ namespace EzMapper
         private EzMapper() { }
         public static void Register<T>() where T : class
         {
-            if (_isBuilt)
-                throw new Exception("The database has allready benn built. You can't register more types");
+            Assertion.That(!_isBuilt, "The database has allready benn built. You can't register more types");
 
             _types.Add(typeof(T));
         }
 
         public static void Register(params Type[] types)
         {
-            if (_isBuilt)
-                throw new Exception("The database has allready benn built. You can't register more types");
-
+            Assertion.That(!_isBuilt, "The database has allready benn built. You can't register more types");
             Assertion.That(types.All(t => t is not null), "type can not be null");
 
             _types.AddRange(types);
@@ -85,8 +82,24 @@ namespace EzMapper
         }
 
 
+        public static async Task<int> DeleteAsync<T>(int id)
+        {
+            return await Task.Run(() => Delete<T>(id));
+        }
+
+        public static async Task<int> DeleteAsync(params object[] models)
+        {
+            return await Task.Run(() => Delete(models));
+        }
+
+
+        //TODO: deal with delete action with m:n relationships
+
         public static int Delete<T>(int id)
         {
+            Assertion.That(_isBuilt, "You can't delete objects yet, the database has not been built");
+            Assertion.That(_types.Contains(typeof(T)), $"object of type {typeof(T)} is not registered");
+
             //in case of inheritance, delete parent
             var tables = ModelParser.CreateTables(typeof(T));
             var table = tables.Where(t => t.Name == typeof(T).Name).First();
@@ -108,33 +121,74 @@ namespace EzMapper
             return _db.ExecuteNonQuery(sql, _db.Param("p0", id));
         }
 
+        public static int Delete(params object[] models)
+        {
+            Assertion.That(_isBuilt, "You can't delete objects yet, the database has not been built");
+
+            int count = 0;
+
+            foreach (object model in models)
+            {
+                Assertion.NotNull(model);
+                Assertion.That(_types.Contains(model.GetType()), $"object of type {model.GetType()} is not registered");
+
+                //in case of inheritance, delete parent
+                var tables = ModelParser.CreateTables(model.GetType());
+                var table = tables.Where(t => t.Name == model.GetType().Name).First();
+
+                Column pk = table.Columns.Where(col => col.IsPrimaryKey).First();
+
+                //this will find the the root parent in case of inheritance
+                while (pk.IsForeignKey)
+                {
+                    var fk = table.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
+                    var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
+
+                    table = targetTable;
+                    pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
+                }
+
+                string pkPropName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
+                int id = (int)model.GetType().GetProperty(pkPropName).GetValue(model);
+
+
+                DeleteStatement stmt = new() { Table = table, ID = id };
+                string sql = SqlStatementBuilder.CreateDeleteStatement(stmt);
+                count += _db.ExecuteNonQuery(sql, _db.Param("p0", id));
+
+            }
+
+            return count;
+
+        }
+
+        public static async Task<T> GetAsync<T>(int id)
+        {
+            return await Task.Run(() => Get<T>(id));
+        }
         public static T Get<T>(int id)
         {
+            Assertion.That(_isBuilt, "You can't retrieve objects yet, the database has not been built");
+            Assertion.That(_types.Contains(typeof(T)), $"object of type {typeof(T)} is not registered");
             string pkFieldName = ModelParser.GetPkFieldName(typeof(T));
 
             return RecursiveGet<T>(new WhereClause(pkFieldName, "=", id.ToString())).FirstOrDefault();
         }
 
-        public static async Task<T> GetTAsync<T>(int id)
-        {
-            return await Task.Run(() => Get<T>(id));
-        }
 
+
+        public static async Task<IEnumerable<T>> GetAsync<T>()
+        {
+            return await Task.Run(() => Get<T>());
+        }
         public static IEnumerable<T> Get<T>()
         {
-            if (!_types.Contains(typeof(T)))
-                throw new Exception($"object of type {typeof(T)} is not registered");
+            Assertion.That(_isBuilt, "You can't retrieve objects yet, the database has not been built");
+            Assertion.That(_types.Contains(typeof(T)), $"object of type {typeof(T)} is not registered");
 
             return RecursiveGet<T>();
 
         }
-
-        public static async Task<IEnumerable<T>> GetTAsync<T>()
-        {
-            return await Task.Run(() => Get<T>());
-        }
-
-
 
         private static IEnumerable<T> RecursiveGet<T>(WhereClause whereClause = null)
         {
@@ -303,15 +357,12 @@ namespace EzMapper
 
         public static void Save(params object[] models)
         {
-            if (!_isBuilt)
-                throw new Exception("You can't save objects yet, the database has not been built");
+            Assertion.That(_isBuilt, "You can't save objects yet, the database has not been built");
 
             foreach(object model in models)
             {
                 Assertion.NotNull(model, nameof(model));
-
-                if (!_types.Contains(model.GetType()))
-                    throw new Exception($"object of type {model} is not registered");
+                Assertion.That(_types.Contains(model.GetType()), $"object of type {model} is not registered");
 
                 List<Table> tables = ModelParser.CreateTables(model.GetType()).GroupBy(t => t.Name).Select(g => g.First()).ToList();
                 List<Table> sortedTables = StatementBuilder.SortTablesByForeignKeys(tables).ToList();
@@ -331,7 +382,33 @@ namespace EzMapper
                     Console.WriteLine(sql);
 
                     _db.ExecuteNonQuery(sql, paras.ToArray());
+
+                    sortedTables.ForEach(t => t.Columns.ForEach(c => c.Ignored = false)); // QUICK FIX:
+                    // PROBLEM: the method GetDbParams will set the IsIgnored proprty of a table if the value of a foreign key is null
+                    // but all tables all shared, so the next record of the same table will have the IsIgnored flag set no matter what value the fk has
+                    //quick fix: reset the state of all tables after an excution of an insert
                 }
+            }
+        }
+
+        public static async Task UpdateAsync(params object[] models)
+        {
+            await Task.Run(() => Update(models));
+        }
+
+        public static void Update(params object[] models)
+        {
+            Assertion.That(_isBuilt, "You can't update objects yet, the database has not been built");
+
+            foreach(object model in models)
+            {
+                Assertion.NotNull(model);
+
+                string pkPropName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
+                int id = (int)model.GetType().GetProperty(pkPropName).GetValue(model);
+
+                Types.InvokeGenericMethod(typeof(EzMapper), null, "Delete", model.GetType(), id);
+                Save(model);
             }
         }
     }

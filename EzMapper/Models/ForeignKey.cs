@@ -11,12 +11,13 @@ namespace EzMapper.Models
             FieldName = fieldName;
             TargetTable = targetTable;
             TargetField = targetField;
-            Action = action;
+            DeleteAction = action;
         }
         public string FieldName { get; set; }
         public string TargetTable { get; set; }
         public string TargetField { get; set; }
-        public DeleteAction Action { get; set; }
+        public DeleteAction DeleteAction { get; set; }
+        public UpdateAction UpdateAction { get; set; } = UpdateAction.NoAction;
 
     }
 }
