@@ -50,7 +50,7 @@ namespace EzMapper
             
             if (_isBuilt) return;
 
-            SQLiteConnection.CreateFile(Default.DbName + ";Version=3");
+            SQLiteConnection.CreateFile(Default.DbName);
 
             _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}; Foreign Keys=True; Version=3;");
             List<Table> tables = new();
@@ -92,9 +92,6 @@ namespace EzMapper
             return await Task.Run(() => Delete(models));
         }
 
-
-        //TODO: deal with delete action with m:n relationships
-
         public static int Delete<T>(int id)
         {
             Assertion.That(_isBuilt, "You can't delete objects yet, the database has not been built");
@@ -132,34 +129,13 @@ namespace EzMapper
                 Assertion.NotNull(model);
                 Assertion.That(_types.Contains(model.GetType()), $"object of type {model.GetType()} is not registered");
 
-                //in case of inheritance, delete parent
-                var tables = ModelParser.CreateTables(model.GetType());
-                var table = tables.Where(t => t.Name == model.GetType().Name).First();
+                string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
+                int pkValue = (int)model.GetType().GetProperty(pkPropertyName).GetValue(model);
 
-                Column pk = table.Columns.Where(col => col.IsPrimaryKey).First();
-
-                //this will find the the root parent in case of inheritance
-                while (pk.IsForeignKey)
-                {
-                    var fk = table.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
-                    var targetTable = tables.Where(t => t.Name == fk.TargetTable).First();
-
-                    table = targetTable;
-                    pk = targetTable.Columns.Where(col => col.IsPrimaryKey).First();
-                }
-
-                string pkPropName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
-                int id = (int)model.GetType().GetProperty(pkPropName).GetValue(model);
-
-
-                DeleteStatement stmt = new() { Table = table, ID = id };
-                string sql = SqlStatementBuilder.CreateDeleteStatement(stmt);
-                count += _db.ExecuteNonQuery(sql, _db.Param("p0", id));
-
+                count += (int)Types.InvokeGenericMethod(typeof(EzMapper), null, "Delete", model.GetType(), pkValue);
             }
 
             return count;
-
         }
 
         public static async Task<T> GetAsync<T>(int id)

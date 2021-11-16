@@ -10,7 +10,8 @@ namespace EzMapper.ConsoleApp.Models
     public class Teacher : Person
     {
         public int WorkingYears { get; set; }
-        [Shared]
+
+        [Shared] // delete by default, no other attribute is possible
         public List<Course> Courses { get; set; }
     }
 }

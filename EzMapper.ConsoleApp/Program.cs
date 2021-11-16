@@ -1,12 +1,9 @@
-﻿using System;
+﻿using EzMapper.ConsoleApp.Models;
+using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
-using EzMapper.Attributes;
-using EzMapper.ConsoleApp.Models;
 
 namespace EzMapper.ConsoleApp
 {
@@ -16,11 +13,11 @@ namespace EzMapper.ConsoleApp
         {
             File.Delete("db.sqlite");
 
-            EzMapper.Register<Student>();
-            EzMapper.Register<Teacher>();
+            //EzMapper.Register<Student>();
+            //EzMapper.Register<Teacher>();
+            EzMapper.Register(typeof(Student), typeof(Teacher)); //TODO: assembly scan and auto register with marker interface
             EzMapper.Build();
 
-            
             Person student = new Student()
             {
                 ID = 1,
@@ -75,6 +72,8 @@ namespace EzMapper.ConsoleApp
                 Courses = new List<Course>() {  c2, c3 }
             };
 
+            
+
             await EzMapper.SaveAsync(student, teacher1, teacher2);
 
             var students = await EzMapper.GetAsync<Student>();
@@ -86,7 +85,9 @@ namespace EzMapper.ConsoleApp
 
             var jane2 = EzMapper.Get<Teacher>().Where(t => t.ID == 2).FirstOrDefault();
 
+            //EzMapper.Delete(Jane);
             //EzMapper.Delete(John);
+
 
             John.Phones.Add(new Phone() { Brand = "Xiaomi", ID = 5, CPU = new Cpu() { Brand = "xiaomiCpu", ID = 15 } });
             John.School = "Fh Technikum";
@@ -94,16 +95,16 @@ namespace EzMapper.ConsoleApp
             John.Numbers.Add(500);
 
             Jack.Car = new Car() { Brand = "VW Golf", ModelNumber = 20 };
-            
 
-            EzMapper.Update(John, Jack);
+            EzMapper.Update(John);
+            await EzMapper.UpdateAsync(Jack);
 
             John = EzMapper.Get<Student>(1);
+            Jack = EzMapper.Get<Teacher>(Jack.ID);
 
-            //int affectedRows = EzMapper.Delete<Student>(1);
+            //int affectedRows = EzMapper.Delete(Jack, John, Jane);
+
+            Console.WriteLine();
         }
-
     }
-
-
 }

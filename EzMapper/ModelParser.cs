@@ -189,6 +189,30 @@ namespace EzMapper
 
                         if (Types.HasAttribute<SharedAttribute>(prop))
                         {
+
+                            //in case of m:n relationships, we must delete the assignment records from the assignment table before deleting the model
+                            //to do that, we must add a trigger to the parent
+
+                            //var action = Types.HasAttribute<OnDeleteAttribute>(prop)
+                            //    ? prop.GetCustomAttribute<OnDeleteAttribute>().Action
+                            //    : throw new Exception($"{prop.Name} of class {prop.DeclaringType} does not have a delete action attribute");
+
+                            string deleteTrigger1 = null; // delete the assignment record
+                            string deleteTrigger2 = null; // delete the child object in case no more assignment records point to it
+
+
+                            deleteTrigger1 = $"CREATE TRIGGER DELETE_ManyToMany_AssignmentRecord_WHEN_{model.GetType().Name}_IS_DELETED ";
+                            deleteTrigger1 += $"BEFORE DELETE ON {model.GetType().Name} BEGIN DELETE FROM {model.GetType().Name}_{elementType.Name} WHERE ";
+                            deleteTrigger1 += $"{model.GetType().Name}ID ";
+                            deleteTrigger1 += $"= old.{GetPkFieldName(model.GetType())}; END;";
+
+                            deleteTrigger2 = $"CREATE TRIGGER DELETE_{elementType.Name}_IF_ALL_REFERENCES_DELETED ";
+                            deleteTrigger2 += $"AFTER DELETE ON {model.GetType().Name}_{elementType.Name} WHEN ( SELECT COUNT(*) FROM {model.GetType().Name}_{elementType.Name} WHERE {elementType.Name}ID = old.{elementType.Name}ID ) = 0 ";
+                            deleteTrigger2 += $"BEGIN DELETE FROM {elementType.Name} WHERE {GetPkFieldName(elementType)} = old.{elementType.Name}ID; END;";
+
+                            triggers = new() { deleteTrigger1, deleteTrigger2 };
+
+
                             // m:n relathionship
                             // when we have m:n relationships, both types are non primitives
 
@@ -254,7 +278,6 @@ namespace EzMapper
                             deleteTrigger += $"AFTER DELETE ON {model.GetType().Name} BEGIN DELETE FROM {prop.PropertyType.Name} WHERE ";
                             deleteTrigger += $"{prop.PropertyType.Name}.{GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties())} ";
                             deleteTrigger += $"= old.{prop.Name}{Default.IdProprtyName}; END;";
-
                         }
 
                         /*List<string>*/ triggers = new() { deleteTrigger };

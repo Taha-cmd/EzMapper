@@ -1,4 +1,4 @@
-﻿namespace EzMapper
+﻿namespace EzMapper.Models
 {
     class PrimitivesChildTable
     {
