@@ -12,6 +12,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Linq.Expressions;
+using EzMapper.Expressions;
 
 namespace EzMapper
 {
@@ -164,6 +166,26 @@ namespace EzMapper
 
             return RecursiveGet<T>();
 
+        }
+
+
+        public static async Task<IEnumerable<T>> QueryAsync<T>(Expression<Func<T, bool>> expression)
+        {
+            return await Task.Run(() => Query<T>(expression));
+        }
+        public static IEnumerable<T> Query<T>(Expression<Func<T, bool>> expression)
+        {
+            Assertion.That(_isBuilt, "You can't retrieve objects yet, the database has not been built");
+            Assertion.That(_types.Contains(typeof(T)), $"object of type {typeof(T)} is not registered");
+
+            var stmt = StatementBuilder.CreateSingleSelectStatement<T>();
+            string sqlStatement = SqlStatementBuilder.CreateSelectStatement(stmt);
+
+
+            //TODO: use parameters
+            sqlStatement += $"WHERE {ExpressionParser.ParseExpression(expression.Body)}";
+
+            return _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
         }
 
         private static IEnumerable<T> RecursiveGet<T>(WhereClause whereClause = null)
@@ -344,7 +366,11 @@ namespace EzMapper
                 List<Table> sortedTables = StatementBuilder.SortTablesByForeignKeys(tables).ToList();
                 List<InsertStatement> insertStatements = new();
 
-                sortedTables.ForEach(table => insertStatements.AddRange(StatementBuilder.TableToInsertStatements(table, model, sortedTables.ToArray())));
+                sortedTables.ForEach(table => 
+                {
+                    var statements = StatementBuilder.TableToInsertStatements(table, model, sortedTables.ToArray());
+                    if(statements is not null) insertStatements.AddRange(statements); 
+                });
 
                 //insert statements in assignment tables should always go last
                 var assignmentInserts = insertStatements.Where(ins => ins.Table.Type == typeof(ManyToManyAssignmentTable)).ToList();

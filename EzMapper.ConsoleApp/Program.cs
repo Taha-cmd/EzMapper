@@ -68,13 +68,31 @@ namespace EzMapper.ConsoleApp
                 LastName = "Doe",
                 Hobbies = new string[] { "Reading" },
                 Numbers = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 15 },
-                WorkingYears = 5,
+                WorkingYears = 20,
                 Courses = new List<Course>() {  c2, c3 }
             };
 
-            
+            Person teacher3 = new Teacher()
+            {
+                ID = 4,
+                Age = 24,
+                FirstName = "Robert",
+                LastName = "De Niro",
+                WorkingYears = 25,
+            };
 
-            await EzMapper.SaveAsync(student, teacher1, teacher2);
+            Person teacher4 = new Teacher()
+            {
+                ID = 5,
+                Age = 30,
+                FirstName = "Will",
+                LastName = "Smith",
+                WorkingYears = 30,
+            };
+
+
+
+            await EzMapper.SaveAsync(student, teacher1, teacher2, teacher3, teacher4);
 
             var students = await EzMapper.GetAsync<Student>();
             var teachers = EzMapper.Get<Teacher>();
@@ -83,7 +101,10 @@ namespace EzMapper.ConsoleApp
             var Jane = EzMapper.Get<Teacher>(2);
             var Jack = await EzMapper.GetAsync<Teacher>(3);
 
-            var jane2 = EzMapper.Get<Teacher>().Where(t => t.ID == 2).FirstOrDefault();
+            //var jane2 = EzMapper.Get<Teacher>().Where(t => t.ID == 2).FirstOrDefault();
+
+
+            var results = EzMapper.Query<Teacher>(t => t.WorkingYears >= 25 && t.FirstName != "Will");
 
             //EzMapper.Delete(Jane);
             //EzMapper.Delete(John);

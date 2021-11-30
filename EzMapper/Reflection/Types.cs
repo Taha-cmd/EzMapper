@@ -175,6 +175,7 @@ namespace EzMapper.Reflection
                     if(!IsPrimitive(GetElementType(prop.PropertyType)))
                     {
                         IList collection = (IList)prop.GetValue(model);
+                        if (collection is null) continue;
                         foreach (var nestedObject in collection)
                         {
                             models.Add(nestedObject);

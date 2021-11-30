@@ -41,6 +41,7 @@ namespace EzMapper
                 {
                     // this will add the entire collection  1:n
                     IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
+                    if (collection is null) return null;
                     List<InsertStatement> tmpStatements = new();
                     foreach (var obj in collection)
                         tmpStatements.Add(CreateInsertStatement(table, obj));
@@ -109,7 +110,7 @@ namespace EzMapper
                     foreach (object owner in owners)
                     {
                         IList collection = (IList)targetTable.Type.GetProperty(targetCollectionPropertyName).GetValue(owner);
-
+                        if (collection is null) continue;
                         foreach (var primitve in collection)
                         {
                             //TODO: insert all in one statement
