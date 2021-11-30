@@ -124,6 +124,7 @@ namespace EzMapper
         {
             Assertion.That(_isBuilt, "You can't delete objects yet, the database has not been built");
 
+
             int count = 0;
 
             foreach (object model in models)
@@ -211,7 +212,11 @@ namespace EzMapper
                     int ordinal = reader.GetOrdinal(columnName);
                     value = reader.GetValue(ordinal);
 
-                    value = Convert.ChangeType(value, prop.PropertyType);
+                    if (prop.PropertyType == typeof(bool))
+                        value = SQLiteConvert.ToBoolean(value);
+                    else
+                        value = Convert.ChangeType(value, prop.PropertyType);
+
                     prop.SetValue(model, value);
                 }
                 else if (!Types.IsPrimitive(prop.PropertyType) && !Types.IsCollection(prop.PropertyType)) // read nested objects (1:1)

@@ -12,36 +12,30 @@ namespace EzMapper.Expressions
         // https://docs.microsoft.com/en-us/dotnet/api/system.linq.expressions.binaryexpression?view=net-6.0
         public static string ParseExpression(Expression expression)
         {
+            
 
-            //TODO: parse unary operations, parse non primitves
             var sql = new StringBuilder();
 
             if (expression is BinaryExpression @binaryExpression)
             {
-                if (binaryExpression.Left is BinaryExpression)
-                {
-                    sql.Append(ParseExpression(binaryExpression.Left));
-                    sql.Append($" {binaryExpression.NodeType.ToSqlOperand()} ");
-                }
-
-                if (binaryExpression.Right is BinaryExpression)
-                {
-                    sql.Append(ParseExpression(binaryExpression.Right));
-                }
-
-                if (binaryExpression.Left is MemberExpression @member)
-                {
-                    sql.Append($"{member.Member.Name} {binaryExpression.NodeType.ToSqlOperand()}  ");
-
-                    if (binaryExpression.Right is ConstantExpression @value)
-                        sql.Append(value.Value.GetType() == typeof(int) ? $" {value.Value} " : $" '{value.Value}' ");
-                    else if (binaryExpression.Right is MemberExpression @variable)
-                        sql.Append(GetMemberValue(variable).GetType() == typeof(int) ? $" {GetMemberValue(variable)} " : $" '{GetMemberValue(variable)}' ");
-                }
+                sql.Append($"({ParseExpression(binaryExpression.Left)}) {binaryExpression.NodeType.ToSqlOperand()} ({ParseExpression(binaryExpression.Right)})");
+            }
+            else if(expression is MemberExpression @member)
+            {
+                sql.Append(member.Member.Name);    //problem: differentitate between actual member and a variable
+            }
+            else if (expression is ConstantExpression @value)
+            {
+                sql.Append(value.Value.GetType() == typeof(int) ? $" {value.Value} " : $" '{value.Value}' ");
+            }
+            else if(expression is UnaryExpression @unaryExpression)
+            {
+                sql.Append($" {unaryExpression.NodeType.ToSqlOperand()} ( {ParseExpression(unaryExpression.Operand)} ) ");
             }
 
             return sql.ToString();
         }
+
 
         private static object GetMemberValue(MemberExpression memberExpression)
         {
