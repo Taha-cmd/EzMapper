@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace EzMapper.Models
 {
-    class Table
+    internal class Table
     {
         public Type Type { get; set; }
         public string Name { get; set; }
@@ -15,10 +15,6 @@ namespace EzMapper.Models
         public string Alias { get; set; } = RandomString(10);
 
         public string PrimaryKey => Columns.Where(col => col.IsPrimaryKey).First().Name;
-        public void NewAlias()
-        {
-            Alias = RandomString(10);
-        }
 
         private static Random random = new();
         private static string RandomString(int length)

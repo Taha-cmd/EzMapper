@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace EzMapper
 {
-    class StatementBuilder
+    internal class StatementBuilder
     {
         public static InsertStatement CreateInsertStatement(Table table, object model)
         {
@@ -41,6 +41,7 @@ namespace EzMapper
                 {
                     // this will add the entire collection  1:n
                     IEnumerable<object> collection = Types.GetCollectionOfType(model, table.Type);
+                    if (collection is null) return null;
                     List<InsertStatement> tmpStatements = new();
                     foreach (var obj in collection)
                         tmpStatements.Add(CreateInsertStatement(table, obj));
@@ -49,7 +50,7 @@ namespace EzMapper
                     if(Types.IsCollectionOfTypeShared(model, table.Type))
                     {
                         //if the collection is shared, we assume that we might insert duplicates, so set the replaceable flag
-                        tmpStatements.ForEach(stmt => stmt.Replaceable = true);
+                        tmpStatements.ForEach(stmt => stmt.Ignoreable = true);
 
                         // find table
                         Table assignmentTable = tables.Where(t => t.Name == $"{model.GetType().Name}_{table.Name}").First();
@@ -60,18 +61,7 @@ namespace EzMapper
                         //get parent table
                         Table parentTable = tables.Where(t => t.Type == model.GetType()).First();
                         Column pkCol = parentTable.Columns.Where(col => col.IsPrimaryKey).First();
-                        string parentPK;
-
-                        //if primary key is also a foriegn key, then we are dealing with inheritance and the pk name is not identical to the pk property name
-                        if(pkCol.IsForeignKey)
-                        {
-                            parentPK = parentTable.ForeignKeys.Where(fk => fk.FieldName == pkCol.Name).First().TargetField;
-                        }
-                        else
-                        {
-                            parentPK = pkCol.Name;
-                        }
-
+                        string parentPK = ModelParser.GetPrimaryKeyPropertyName(parentTable.Type);
 
                         //item pk
                         string itemPK = table.Columns.Where(col => col.IsPrimaryKey).First().Name;
@@ -109,17 +99,16 @@ namespace EzMapper
                     foreach (object owner in owners)
                     {
                         IList collection = (IList)targetTable.Type.GetProperty(targetCollectionPropertyName).GetValue(owner);
-
+                        if (collection is null) continue;
                         foreach (var primitve in collection)
                         {
+                            //TODO: insert all in one statement
                             var obj = new ExpandoObject() as IDictionary<string, object>;
                             obj.Add(targetCollectionPropertyName, primitve);
                             obj.Add(Default.OwnerIdPropertyName, owner.GetType().GetProperty(targetTable.PrimaryKey).GetValue(owner));
                             insertStatements.Add(CreateInsertStatement(table, obj));
                         }
                     }
-
-
                 }
                 else if(!Types.IsPrimitive(table.Type) && !Types.IsCollection(table.Type))// object (1:1)
                 {
@@ -235,6 +224,8 @@ namespace EzMapper
 
             var stmt = new SelectStatement(mainTable);
 
+
+            // join on parents to traverse inherited classed upwards
             while (pk.IsForeignKey)
             {
                 var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();

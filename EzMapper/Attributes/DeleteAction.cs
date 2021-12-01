@@ -10,7 +10,7 @@ namespace EzMapper.Attributes
         NoAction
     }
 
-    public static class EnumExtensions
+    internal static class EnumExtensions
     {
         public static string Value(this DeleteAction deleteAction)
         {

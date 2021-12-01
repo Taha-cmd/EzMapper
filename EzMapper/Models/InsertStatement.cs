@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class InsertStatement
+    internal class InsertStatement
     {
         public object Model { get; set; } // actual data
         public Table Table { get; set; } // table structure
-        public bool Replaceable { get; set; } = false;
+        public bool Ignoreable { get; set; } = false; // ignore the record if allready exists
     }
 }

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Reflection
 {
-    public class CollectionsHelper
+    internal class CollectionsHelper
     {
         public static object ConvertCollection(Type src, Type dest)
         {

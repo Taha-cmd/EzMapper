@@ -2,13 +2,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 
 namespace EzMapper.Reflection
 {
-    public class Types
+    internal class Types
     {
         public static bool HasParentModel(object model)
         {
@@ -149,11 +148,6 @@ namespace EzMapper.Reflection
             return HasAttribute<SharedAttribute>(collectionTypeProp);
         }
 
-        internal static object FindOwnerInObjectHierarchy(object root, object target)
-        {
-            return new object();
-        }
-
         public static IEnumerable<object> FlattenNestedObjects(object model)
         {
             List<object> models = new();
@@ -176,6 +170,7 @@ namespace EzMapper.Reflection
                     if(!IsPrimitive(GetElementType(prop.PropertyType)))
                     {
                         IList collection = (IList)prop.GetValue(model);
+                        if (collection is null) continue;
                         foreach (var nestedObject in collection)
                         {
                             models.Add(nestedObject);
@@ -214,12 +209,12 @@ namespace EzMapper.Reflection
 
         public static object InvokeGenericMethod(Type classType, object instance, string methodName, Type typeArugment, params object[] arguments)
         {
-            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public); // get private methods
+            
+            Type[] types = arguments.Select(arg => arg.GetType()).ToArray();
+            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Standard, types, null); // get private methods also
             var genericMethodInfo = methodInfo.MakeGenericMethod(typeArugment);
             return genericMethodInfo.Invoke(instance, arguments);
         }
-
-        //public static IEnumerable<object> GetCollectionOfPropertyName
 
     }
 }

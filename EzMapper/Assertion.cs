@@ -2,7 +2,7 @@
 
 namespace EzMapper
 {
-    static class Assertion
+    internal static class Assertion
     {
         public static void NotNull<T>(T obj, string name = "object") where T : class
         {

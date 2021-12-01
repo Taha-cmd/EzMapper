@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp.Models
 {
-    public class Student : Person, IModel
+    public class Student : Person, IEzModel
     {
         public string School { get; set; }
 

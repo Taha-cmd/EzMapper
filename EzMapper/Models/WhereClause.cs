@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class WhereClause
+    internal class WhereClause
     {
         public WhereClause(string leftOperand, string operation, string rightOperand)
         {

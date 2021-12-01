@@ -7,10 +7,12 @@ using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp.Models
 {
-    public class Teacher : Person
+    public class Teacher : Person, IEzModel
     {
+        public bool Retired { get; set; }
         public int WorkingYears { get; set; }
-        [Shared]
+
+        [Shared] // delete by default, no other attribute is possible
         public List<Course> Courses { get; set; }
     }
 }

@@ -1,25 +1,28 @@
-﻿using System;
+﻿using EzMapper.ConsoleApp.Models;
+using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using EzMapper.Attributes;
-using EzMapper.ConsoleApp.Models;
+using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             File.Delete("db.sqlite");
 
-            EzMapper.Register<Student>();
-            EzMapper.Register<Teacher>();
+            //EzMapper.Register<Student>(); // register each type via generic method
+            //EzMapper.Register<Teacher>();
+
+            //EzMapper.Register(typeof(Student), typeof(Teacher)); register types in one call
+
+            EzMapper.RegisterTypesFromAssembly(Assembly.GetExecutingAssembly()); // better way: scan assembly for types implementing the marker interface IEzModel
+
             EzMapper.Build();
 
-            
             Person student = new Student()
             {
                 ID = 1,
@@ -70,23 +73,73 @@ namespace EzMapper.ConsoleApp
                 LastName = "Doe",
                 Hobbies = new string[] { "Reading" },
                 Numbers = new List<int>() { 1, 2, 3, 4, 5, 6, 7, 8, 15 },
-                WorkingYears = 5,
+                WorkingYears = 20,
                 Courses = new List<Course>() {  c2, c3 }
             };
 
-            EzMapper.Save(student, teacher1, teacher2);
+            Person teacher3 = new Teacher()
+            {
+                ID = 4,
+                Age = 24,
+                FirstName = "Robert",
+                LastName = "De Niro",
+                WorkingYears = 25,
+            };
 
-            var students = EzMapper.Get<Student>();
+            Person teacher4 = new Teacher()
+            {
+                ID = 5,
+                Age = 30,
+                FirstName = "Will",
+                LastName = "Smith",
+                WorkingYears = 30,
+                Retired = true
+            };
+
+
+
+            await EzMapper.SaveAsync(student, teacher1, teacher2, teacher3, teacher4);
+
+            var students = await EzMapper.GetAsync<Student>();
             var teachers = EzMapper.Get<Teacher>();
 
             var John = EzMapper.Get<Student>(1);
             var Jane = EzMapper.Get<Teacher>(2);
-            var Jack = EzMapper.Get<Teacher>(3);
+            var Jack = await EzMapper.GetAsync<Teacher>(3);
 
-            int affectedRows = EzMapper.Delete<Student>(1);
+
+            int num = 25; // 
+            var robert = EzMapper.Query<Teacher>(t => t.WorkingYears >= num && t.FirstName != "Will");
+            var allButWill = EzMapper.Query<Teacher>(t => !(t.FirstName == "Will" && t.Age == 30));
+            var teachersWithNoCar = EzMapper.Query<Teacher>(t => t.Car == null);
+            var teachersWithNoCarYoungerThan30 = EzMapper.Query<Teacher>(t => t.Car == null && t.Age < 30);
+
+            //var teacherWithCar2 = EzMapper.Query<Teacher>(t => t.Car.ModelNumber == 2); // not possible for now
+
+
+            // no filtering based on collections
+            //var test = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("swimming")); // won't work
+
+            //EzMapper.Delete(Jane);
+            //EzMapper.Delete(John);
+
+
+            John.Phones.Add(new Phone() { Brand = "Xiaomi", ID = 5, CPU = new Cpu() { Brand = "xiaomiCpu", ID = 15 } });
+            John.School = "Fh Technikum";
+            John.Car = new Car() { Brand = "Tesla", ModelNumber = 4 };
+            John.Numbers.Add(500);
+
+            Jack.Car = new Car() { Brand = "VW Golf", ModelNumber = 20 };
+
+            EzMapper.Update(John);
+            await EzMapper.UpdateAsync(Jack);
+
+            John = EzMapper.Get<Student>(1);
+            Jack = EzMapper.Get<Teacher>(Jack.ID);
+
+            //int affectedRows = EzMapper.Delete(Jack, John, Jane);
+
+            Console.WriteLine();
         }
-
     }
-
-
 }

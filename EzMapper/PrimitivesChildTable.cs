@@ -1,6 +1,0 @@
-﻿namespace EzMapper
-{
-    class PrimitivesChildTable
-    {
-    }
-}

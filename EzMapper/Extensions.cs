@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper
 {
-    public static class Extensions
+    internal static class Extensions
     {
         public static void Merge<TKey, TValue>(this Dictionary<TKey, TValue> me, Dictionary<TKey, TValue> other)
         {
