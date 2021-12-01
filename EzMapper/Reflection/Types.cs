@@ -7,7 +7,7 @@ using System.Reflection;
 
 namespace EzMapper.Reflection
 {
-    public class Types
+    internal class Types
     {
         public static bool HasParentModel(object model)
         {
@@ -148,11 +148,6 @@ namespace EzMapper.Reflection
             return HasAttribute<SharedAttribute>(collectionTypeProp);
         }
 
-        internal static object FindOwnerInObjectHierarchy(object root, object target)
-        {
-            return new object();
-        }
-
         public static IEnumerable<object> FlattenNestedObjects(object model)
         {
             List<object> models = new();
@@ -217,12 +212,9 @@ namespace EzMapper.Reflection
             
             Type[] types = arguments.Select(arg => arg.GetType()).ToArray();
             var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Standard, types, null); // get private methods also
-            //var methodInfo = 
             var genericMethodInfo = methodInfo.MakeGenericMethod(typeArugment);
             return genericMethodInfo.Invoke(instance, arguments);
         }
-
-        //public static IEnumerable<object> GetCollectionOfPropertyName
 
     }
 }

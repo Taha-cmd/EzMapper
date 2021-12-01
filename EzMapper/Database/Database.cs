@@ -4,7 +4,7 @@ using System.Data.Common;
 
 namespace EzMapper.Database
 {
-    public class Database<TConnection, TCommand, TParam> : IDatebase
+    internal  class Database<TConnection, TCommand, TParam> : IDatebase
                         where TConnection : DbConnection
                         where TCommand    : DbCommand
                         where TParam      : DbParameter

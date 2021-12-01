@@ -7,7 +7,7 @@ using EzMapper.Attributes;
 
 namespace EzMapper.Database
 {
-    class SqlStatementBuilder
+    internal class SqlStatementBuilder
     {
         public static IEnumerable<string> CreateCreateStatements(IEnumerable<Table> tables)
         {

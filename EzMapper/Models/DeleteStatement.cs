@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class DeleteStatement
+    internal class DeleteStatement
     {
         public Table Table { get; set; }
         public int ID { get; set; }

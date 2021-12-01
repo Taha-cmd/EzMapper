@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace EzMapper
 {
-    class StatementBuilder
+    internal class StatementBuilder
     {
         public static InsertStatement CreateInsertStatement(Table table, object model)
         {
@@ -61,18 +61,7 @@ namespace EzMapper
                         //get parent table
                         Table parentTable = tables.Where(t => t.Type == model.GetType()).First();
                         Column pkCol = parentTable.Columns.Where(col => col.IsPrimaryKey).First();
-                        string parentPK;
-
-                        //if primary key is also a foriegn key, then we are dealing with inheritance and the pk name is not identical to the pk property name
-                        if(pkCol.IsForeignKey)
-                        {
-                            parentPK = parentTable.ForeignKeys.Where(fk => fk.FieldName == pkCol.Name).First().TargetField;
-                        }
-                        else
-                        {
-                            parentPK = pkCol.Name;
-                        }
-
+                        string parentPK = ModelParser.GetPrimaryKeyPropertyName(parentTable.Type);
 
                         //item pk
                         string itemPK = table.Columns.Where(col => col.IsPrimaryKey).First().Name;
@@ -235,6 +224,8 @@ namespace EzMapper
 
             var stmt = new SelectStatement(mainTable);
 
+
+            // join on parents to traverse inherited classed upwards
             while (pk.IsForeignKey)
             {
                 var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();

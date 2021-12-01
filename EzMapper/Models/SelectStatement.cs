@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class SelectStatement
+    internal class SelectStatement
     {
         public SelectStatement(Table table, params Join[] joins)
         {

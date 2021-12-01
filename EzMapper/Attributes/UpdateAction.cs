@@ -12,7 +12,7 @@ namespace EzMapper.Attributes
         NoAction
     }
 
-    public static class UpdateExtensions
+    internal static class UpdateExtensions
     {
         public static string Value(this UpdateAction deleteAction)
         {

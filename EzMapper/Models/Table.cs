@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace EzMapper.Models
 {
-    class Table
+    internal class Table
     {
         public Type Type { get; set; }
         public string Name { get; set; }

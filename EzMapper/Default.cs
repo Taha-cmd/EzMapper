@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper
 {
-    class Default
+    internal class Default
     {
         public const string DbName = "db.sqlite";
         public const string IdProprtyName = "ID";

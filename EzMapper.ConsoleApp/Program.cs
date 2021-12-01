@@ -88,6 +88,7 @@ namespace EzMapper.ConsoleApp
                 FirstName = "Will",
                 LastName = "Smith",
                 WorkingYears = 30,
+                Retired = true
             };
 
 
@@ -101,10 +102,16 @@ namespace EzMapper.ConsoleApp
             var Jane = EzMapper.Get<Teacher>(2);
             var Jack = await EzMapper.GetAsync<Teacher>(3);
 
-            //var jane2 = EzMapper.Get<Teacher>().Where(t => t.ID == 2).FirstOrDefault();
+
+            int num = 25; // 
+            var robert = EzMapper.Query<Teacher>(t => t.WorkingYears >= num && t.FirstName != "Will");
+            var allButWill = EzMapper.Query<Teacher>(t => !(t.FirstName == "Will" && t.Age == 30));
+            var teachersWithNoCar = EzMapper.Query<Teacher>(t => t.Car == null);
+            var teachersWithNoCarYoungerThan30 = EzMapper.Query<Teacher>(t => t.Car == null && t.Age < 30);
 
 
-            var results = EzMapper.Query<Teacher>(t => t.WorkingYears >= 25 && t.FirstName != "Will");
+            // no filtering based on collections
+            //var test = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("swimming")); // won't work
 
             //EzMapper.Delete(Jane);
             //EzMapper.Delete(John);

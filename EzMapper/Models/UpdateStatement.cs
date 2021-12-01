@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class UpdateStatement
+    internal class UpdateStatement
     {
         public Table Table { get; set; }
         public object Model { get; set; }

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EzMapper.Models
 {
-    class Join
+    internal class Join
     {
         public Table Table { get; set; } // join this table
         public string ForeignKey { get; set; } // using this foreign key

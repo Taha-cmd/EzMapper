@@ -2,7 +2,7 @@
 
 namespace EzMapper.Models
 {
-    class Column
+    internal class Column
     {
         public Column() { }
 

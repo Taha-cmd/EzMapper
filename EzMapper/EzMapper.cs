@@ -132,7 +132,7 @@ namespace EzMapper
                 Assertion.NotNull(model);
                 Assertion.That(_types.Contains(model.GetType()), $"object of type {model.GetType()} is not registered");
 
-                string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
+                string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(model.GetType());
                 int pkValue = (int)model.GetType().GetProperty(pkPropertyName).GetValue(model);
 
                 count += (int)Types.InvokeGenericMethod(typeof(EzMapper), null, "Delete", model.GetType(), pkValue);
@@ -184,7 +184,14 @@ namespace EzMapper
 
 
             //TODO: use parameters
-            sqlStatement += $"WHERE {ExpressionParser.ParseExpression(expression.Body)}";
+            try
+            {
+                sqlStatement += $"WHERE {ExpressionParser.ParseExpression(expression.Body)}";
+            }
+            catch(Exception ex)
+            {
+                throw new Exception("something went wrong " + ex.Message);
+            }
 
             return _db.ExecuteQuery<T>(sqlStatement, ObjectReader<T>);
         }
@@ -230,7 +237,7 @@ namespace EzMapper
 
                     fkValue = Convert.ChangeType(fkValue, typeof(int));
 
-                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType, prop.PropertyType.GetProperties());
+                    string targetPkPropertyName = ModelParser.GetPrimaryKeyPropertyName(prop.PropertyType);
                     string pk = $"{prop.PropertyType.Name}_{targetPkPropertyName}";
 
                     var where = new WhereClause(pk, "=", fkValue.ToString());
@@ -251,7 +258,7 @@ namespace EzMapper
                         string fkName = prop.DeclaringType.Name + Default.IdProprtyName;
 
                         // get primary key value
-                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T), typeof(T).GetProperties());
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(typeof(T));
                         string pkColumnName = $"{prop.DeclaringType.Name}_{pkPropertyName}";
                         int ordinal = reader.GetOrdinal(pkColumnName);
 
@@ -289,7 +296,7 @@ namespace EzMapper
                     else
                     {
                         // find pk and pk value of owner
-                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(elementType,props);
+                        string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(elementType);
 
                         //find the pk property so we can find thedeclaring type of primary key (in case we are dealing with inheritance)
                         var pkProp = props.Where(p => p.Name == pkPropertyName).First();
@@ -304,7 +311,7 @@ namespace EzMapper
                             // get the foriegn key names of the assignment table
 
                             string childTableName = elementType.Name;
-                            string childTablePkName = ModelParser.GetPrimaryKeyPropertyName(elementType,elementType.GetProperties());
+                            string childTablePkName = ModelParser.GetPrimaryKeyPropertyName(elementType);
                             string assignmentTableName = model.GetType().Name + "_" + elementType.Name;
                             string fkToOwnerColumnName = model.GetType().Name + Default.IdProprtyName;
                             string fkToChildColumnName = elementType.Name + Default.IdProprtyName;
@@ -411,7 +418,7 @@ namespace EzMapper
             {
                 Assertion.NotNull(model);
 
-                string pkPropName = ModelParser.GetPrimaryKeyPropertyName(model.GetType(), model.GetType().GetProperties());
+                string pkPropName = ModelParser.GetPrimaryKeyPropertyName(model.GetType());
                 int id = (int)model.GetType().GetProperty(pkPropName).GetValue(model);
 
                 Types.InvokeGenericMethod(typeof(EzMapper), null, "Delete", model.GetType(), id);

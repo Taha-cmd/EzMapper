@@ -2,7 +2,7 @@
 
 namespace EzMapper.Models
 {
-    class ForeignKey
+    internal class ForeignKey
     {
         public ForeignKey() { }
 

@@ -9,6 +9,7 @@ namespace EzMapper.ConsoleApp.Models
 {
     public class Teacher : Person
     {
+        public bool Retired { get; set; }
         public int WorkingYears { get; set; }
 
         [Shared] // delete by default, no other attribute is possible
