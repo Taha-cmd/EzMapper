@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace EzMapper.ConsoleApp
@@ -13,9 +14,13 @@ namespace EzMapper.ConsoleApp
         {
             File.Delete("db.sqlite");
 
-            //EzMapper.Register<Student>();
+            //EzMapper.Register<Student>(); // register each type via generic method
             //EzMapper.Register<Teacher>();
-            EzMapper.Register(typeof(Student), typeof(Teacher)); //TODO: assembly scan and auto register with marker interface
+
+            //EzMapper.Register(typeof(Student), typeof(Teacher)); register types in one call
+
+            EzMapper.RegisterTypesFromAssembly(Assembly.GetExecutingAssembly()); // better way: scan assembly for types implementing the marker interface IEzModel
+
             EzMapper.Build();
 
             Person student = new Student()
@@ -108,6 +113,8 @@ namespace EzMapper.ConsoleApp
             var allButWill = EzMapper.Query<Teacher>(t => !(t.FirstName == "Will" && t.Age == 30));
             var teachersWithNoCar = EzMapper.Query<Teacher>(t => t.Car == null);
             var teachersWithNoCarYoungerThan30 = EzMapper.Query<Teacher>(t => t.Car == null && t.Age < 30);
+
+            //var teacherWithCar2 = EzMapper.Query<Teacher>(t => t.Car.ModelNumber == 2); // not possible for now
 
 
             // no filtering based on collections

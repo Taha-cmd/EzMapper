@@ -47,6 +47,15 @@ namespace EzMapper
             _types.AddRange(types);
         }
 
+        public static void RegisterTypesFromAssembly(Assembly assembly)
+        {
+            var types = assembly.GetTypes().Where(type => type.GetInterfaces().Contains(typeof(IEzModel)));
+
+            if (!types.Any()) throw new Exception("No types found");
+
+            _types.AddRange(types);
+        }
+
         public static void Build()
         {
             
