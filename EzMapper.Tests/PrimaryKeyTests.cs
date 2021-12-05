@@ -56,6 +56,15 @@ namespace EzMapper.Tests
 
             NUnit.Framework.Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
         }
+
+        [Test]
+        public void Model_Has_Inherited_PrimaryKey()
+        {
+            Parent obj = new Child<object>() { ID = 3 }; // polymorphic, id is an inherited id
+
+            string pkFieldName = ModelParser.GetPkFieldName(obj.GetType());
+            NUnit.Framework.Assert.IsTrue(pkFieldName == nameof(Parent) + "ID");
+        }
         
     }
 }

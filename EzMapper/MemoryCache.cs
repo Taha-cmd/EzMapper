@@ -54,7 +54,7 @@ namespace EzMapper
         public IEnumerable<T> Get<T>()
         {
             Assert.That(ContainsType<T>(), $"Objects of type {typeof(T)} not found");
-            return _cache[typeof(T)].Values.Select(obj => (T)obj);
+            return _cache[typeof(T)].Values.Select(obj => (T)obj).ToList();
         }
     }
 }

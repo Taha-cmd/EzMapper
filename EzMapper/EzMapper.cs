@@ -14,6 +14,9 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Linq.Expressions;
 using EzMapper.Expressions;
+using log4net;
+
+[assembly: log4net.Config.XmlConfigurator(ConfigFile = "log4net.config", Watch = true)]
 
 namespace EzMapper
 {
@@ -22,12 +25,15 @@ namespace EzMapper
 
         private static readonly List<Type> _types = new();
         private static readonly ICache _cache = new MemoryCache();
+        private static readonly ILog _logger = Default.GetLogger();
+
         private static IDatebase _db;
         private static bool _isBuilt = File.Exists(Default.DbName);
         
 
         static EzMapper()
         {
+            log4net.Config.XmlConfigurator.Configure();
             _db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}; Foreign Keys=True; Version=3;");
         }
         private EzMapper() { }
@@ -49,7 +55,7 @@ namespace EzMapper
         public static void RegisterTypesFromAssembly(Assembly assembly)
         {
             var types = assembly.GetTypes().Where(type => type.GetInterfaces().Contains(typeof(IEzModel)));
-            if (!types.Any()) throw new Exception("No types found");
+            Assert.That(types.Any(), $"No models found in assembly {assembly.FullName} that implements {nameof(IEzModel)}");
 
             _types.AddRange(types);
         }
@@ -69,7 +75,7 @@ namespace EzMapper
 
             foreach (string statement in SqlStatementBuilder.CreateCreateStatements(tables))
             {
-                Console.WriteLine(statement);
+                _logger.Debug(statement);
                 _db.ExecuteNonQuery(statement);
             }
 
@@ -81,7 +87,7 @@ namespace EzMapper
                 {
                     if(!string.IsNullOrEmpty(triggerSql))
                     {
-                        Console.WriteLine(triggerSql);
+                        _logger.Debug(triggerSql);
                         _db.ExecuteNonQuery(triggerSql);
                     }
                         
@@ -145,7 +151,7 @@ namespace EzMapper
                 string pkPropertyName = ModelParser.GetPrimaryKeyPropertyName(model.GetType());
                 int pkValue = (int)model.GetType().GetProperty(pkPropertyName).GetValue(model);
 
-                count += (int)Types.InvokeGenericMethod(typeof(EzMapper), null, "Delete", model.GetType(), pkValue);
+                count += (int)Types.InvokeGenericMethod(typeof(EzMapper), null, nameof(EzMapper.Delete), model.GetType(), pkValue);
             }
 
             return count;
@@ -162,7 +168,6 @@ namespace EzMapper
 
             if (_cache.Contains<T>(id)) 
                 return _cache.Get<T>(id);
-
 
             string pkFieldName = ModelParser.GetPkFieldName(typeof(T));
             return RecursiveGet<T>(new WhereClause(pkFieldName, "=", id.ToString())).FirstOrDefault();
@@ -272,7 +277,7 @@ namespace EzMapper
 
                     var where = new WhereClause(pk, "=", fkValue.ToString());
 
-                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, "RecursiveGet", prop.PropertyType, where)).FirstOrDefault();
+                    value = ((IEnumerable<object>)Types.InvokeGenericMethod(typeof(EzMapper), null, nameof(EzMapper.RecursiveGet), prop.PropertyType, where)).FirstOrDefault();
                     prop.SetValue(model, value);
                 }
                 else if(Types.IsCollection(prop.PropertyType)) // collections
@@ -423,7 +428,7 @@ namespace EzMapper
                 {
                     IEnumerable<DbParameter> paras = ModelParser.GetDbParams(stmt, sortedTables, insertStatements, _db);
                     string sql = SqlStatementBuilder.CreateInsertStatement(stmt);
-                    Console.WriteLine(sql);
+                    _logger.Debug(sql);
 
                     _db.ExecuteNonQuery(sql, paras.ToArray());
 

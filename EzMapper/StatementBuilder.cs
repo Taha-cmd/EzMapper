@@ -225,7 +225,7 @@ namespace EzMapper
             var stmt = new SelectStatement(mainTable);
 
 
-            // join on parents to traverse inherited classed upwards
+            // join on parents to traverse inherited classes upwards
             while (pk.IsForeignKey)
             {
                 var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
