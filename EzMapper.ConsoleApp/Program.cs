@@ -117,8 +117,14 @@ namespace EzMapper.ConsoleApp
             //var teacherWithCar2 = EzMapper.Query<Teacher>(t => t.Car.ModelNumber == 2); // not possible for now
 
 
-            // no filtering based on collections
-            //var test = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("swimming")); // won't work
+            // can filter primitve collections with Contains method. can also pass parameters as values
+            //
+            int two = 2;
+            var allSwimmingTeachers = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("Swimming")); // Jane
+            var allReadingTeachers = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("Reading")); // Jane, Jack
+            var jack = EzMapper.Query<Teacher>(t => t.Hobbies.Contains("Reading") && t.FirstName != "Jane"); // Jack
+            var jack2 = EzMapper.Query<Teacher>(t => t.Numbers.Contains(6)); // Jack
+            var jackJane = EzMapper.Query<Teacher>(t => t.Numbers.Contains(two)); // Jack, Jane
 
             //EzMapper.Delete(Jane);
             //EzMapper.Delete(John);

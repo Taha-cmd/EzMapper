@@ -13,11 +13,13 @@ namespace EzMapper.Expressions
     {
         // https://docs.microsoft.com/en-us/dotnet/api/system.linq.expressions.binaryexpression?view=net-6.0
 
-        private static readonly ExpressionVisitor _binaryVisitor = new RightHandValueResolver();
+        private static readonly ExpressionVisitor _valuesResolver1 = new BinaryVisitor();
+        private static readonly ExpressionVisitor _valuesResolver2 = new MethodCallVisitor();
 
         public static string ParseExpression(Expression expression)
         {
-            expression = _binaryVisitor.Visit(expression);
+            expression = _valuesResolver1.Visit(expression);
+            expression = _valuesResolver2.Visit(expression);
             return ParseExpressionIntern(expression);
         }
 
@@ -61,8 +63,58 @@ namespace EzMapper.Expressions
             {
                 sql.Append($" {unaryExpression.NodeType.ToSqlOperand()} ( {ParseExpressionIntern(unaryExpression.Operand)} ) ");
             }
+            else if (expression is MethodCallExpression @call)
+            {
+                //abandon plans
+
+
+                //calling contains on an array is an extensions method by linq
+                //thus, arg 0 is the array iteself and arg 1 is the actual arugment
+                //calling contains on a list is member method, thus, arg 0 is the argument
+
+                var argument = call.Object is null ? call.Arguments[1] : call.Arguments[0];
+                if (argument is not ConstantExpression) return sql.ToString();
+
+                var argumentValue = ConstantExpressionValue(argument as ConstantExpression);
+
+                if (!Types.IsPrimitive(argumentValue.GetType())) return sql.ToString();
+
+                switch (call.Method.Name)
+                {
+                    case "Contains":
+                        var memeberExpression = (call.Object is null ? call.Arguments[0] : call.Object) as MemberExpression;
+
+                        string propOwner = memeberExpression.Member.DeclaringType.Name;
+                        Type propHolder = memeberExpression.Expression.Type;
+                        string holderPk = ModelParser.GetPkFieldName(propHolder);
+                        string propName = memeberExpression.Member.Name;
+                        string collectionTableName = propOwner + propName;
+
+                        sql.Append($" ( \"{argumentValue}\" IN (SELECT {collectionTableName}.{propName} FROM {collectionTableName} WHERE {collectionTableName}.{propOwner}ID = {propHolder.Name}_{holderPk}) ) ");
+
+                        //WHERE  "Swimming" IN(SELECT PersonHobbies.Hobbies FROM PersonHobbies WHERE PersonHobbies.PersonID = Teacher_PersonID)
+
+
+                break;
+                }
+
+                        //support for contains method
+
+
+                        //Console.WriteLine();
+                        //Console.WriteLine(call.Method.Name);
+                        //Console.WriteLine();
+                        //Console.WriteLine(call.Object);
+                        //Console.WriteLine(call.NodeType);
+                        //Console.WriteLine("HI");
+                }
 
             return sql.ToString();
+        }
+
+        private static object ConstantExpressionValue(ConstantExpression expression)
+        {
+            return Expression.Lambda(expression).Compile().DynamicInvoke();
         }
     }
 }
