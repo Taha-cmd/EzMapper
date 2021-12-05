@@ -86,5 +86,29 @@ namespace EzMapper.Database
         {
             return $"DELETE FROM {stmt.Table.Name} WHERE {stmt.Table.PrimaryKey} = @p0";
         }
+
+        public static string CreateDeleteTrigger(string onTable, string fromTable, string pk, string fk)
+        {
+            string trigger = $"CREATE TRIGGER DELETE_{fromTable}_WHEN_{onTable}_IS_DELETED ";
+            trigger += $"AFTER DELETE ON {onTable} BEGIN DELETE FROM {fromTable} WHERE ";
+            trigger += $"{fromTable}.{pk} = old.{fk}; END;";
+
+            return trigger;
+        }
+
+        public static Tuple<string, string> CreateManyToManyDeleteTrigger(string parentTable, string childTable, string parentPk, string childPk)
+        {
+            string assignmentTable = $"{parentTable}_{childTable}";
+
+            string trigger1 = $"CREATE TRIGGER DELETE_ManyToMany_AssignmentRecord_WHEN_{parentTable}_IS_DELETED ";
+            trigger1 += $"BEFORE DELETE ON {parentTable} BEGIN DELETE FROM {assignmentTable} WHERE ";
+            trigger1 += $"{parentTable}ID = old.{parentPk}; END;";
+
+            string trigger2 = $"CREATE TRIGGER DELETE_{childTable}_IF_ALL_REFERENCES_DELETED ";
+            trigger2 += $"AFTER DELETE ON {assignmentTable} WHEN ( SELECT COUNT(*) FROM {assignmentTable} WHERE {childTable}ID = old.{childTable}ID ) = 0 ";
+            trigger2 += $"BEGIN DELETE FROM {childTable} WHERE {childPk} = old.{childTable}ID; END;";
+
+            return Tuple.Create(trigger1, trigger2);
+        }
     }
 }

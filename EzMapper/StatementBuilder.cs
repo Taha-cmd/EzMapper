@@ -129,7 +129,7 @@ namespace EzMapper
             //important: create an alias for the target table on each join to avoid ambiguity
             // do that by cloning the table, since we are dealing with reference types here, creating a new alias will affect all tables
 
-            Assertion.NotNull(mainTable, nameof(mainTable));
+            Assert.NotNull(mainTable, nameof(mainTable));
 
 
             List<Table> tablesClone = new(tables);

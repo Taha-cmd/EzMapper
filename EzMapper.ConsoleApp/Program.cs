@@ -98,7 +98,7 @@ namespace EzMapper.ConsoleApp
 
 
 
-            await EzMapper.SaveAsync(student, teacher1, teacher2, teacher3, teacher4);
+            EzMapper.Save(student, teacher1, teacher2, teacher3, teacher4);
 
             var students = await EzMapper.GetAsync<Student>();
             var teachers = EzMapper.Get<Teacher>();

@@ -18,7 +18,7 @@ namespace EzMapper
     {
         public static string GetPrimaryKeyPropertyName(Type type)
         {
-            Assertion.NotNull(type, nameof(type));
+            Assert.NotNull(type, nameof(type));
 
             var props = type.GetProperties();
 
@@ -63,6 +63,12 @@ namespace EzMapper
             Type ownerType = Types.FindPropertyOwnerType(type, pkPropertyName);
 
             return ownerType == type ? pkPropertyName : ownerType.Name + Default.IdProprtyName;
+        }
+
+        public static int GetModelId(object model)
+        {
+            string pkPropertyName = GetPrimaryKeyPropertyName(model.GetType());
+            return (int)model.GetType().GetProperty(pkPropertyName).GetValue(model);
         }
 
         public static IEnumerable<DbParameter> GetDbParams(InsertStatement stmt, IEnumerable<Table> tables, IEnumerable<InsertStatement> insertStatements, IDatebase db)
@@ -187,32 +193,17 @@ namespace EzMapper
 
                         if (Types.HasAttribute<SharedAttribute>(prop))
                         {
+                            //when we have m:n relationships, both types are non primitives
 
                             //in case of m:n relationships, we must delete the assignment records from the assignment table before deleting the model
                             //to do that, we must add a trigger to the parent
 
-                            //var action = Types.HasAttribute<OnDeleteAttribute>(prop)
-                            //    ? prop.GetCustomAttribute<OnDeleteAttribute>().Action
-                            //    : throw new Exception($"{prop.Name} of class {prop.DeclaringType} does not have a delete action attribute");
+                            // delete the assignment record
+                            // delete the child object in case no more assignment records point to it
+                            Tuple<string, string> deleteTriggers = SqlStatementBuilder.CreateManyToManyDeleteTrigger(
+                                model.GetType().Name, elementType.Name, GetPkFieldName(model.GetType()), GetPkFieldName(elementType));
 
-                            string deleteTrigger1 = null; // delete the assignment record
-                            string deleteTrigger2 = null; // delete the child object in case no more assignment records point to it
-
-
-                            deleteTrigger1 = $"CREATE TRIGGER DELETE_ManyToMany_AssignmentRecord_WHEN_{model.GetType().Name}_IS_DELETED ";
-                            deleteTrigger1 += $"BEFORE DELETE ON {model.GetType().Name} BEGIN DELETE FROM {model.GetType().Name}_{elementType.Name} WHERE ";
-                            deleteTrigger1 += $"{model.GetType().Name}ID ";
-                            deleteTrigger1 += $"= old.{GetPkFieldName(model.GetType())}; END;";
-
-                            deleteTrigger2 = $"CREATE TRIGGER DELETE_{elementType.Name}_IF_ALL_REFERENCES_DELETED ";
-                            deleteTrigger2 += $"AFTER DELETE ON {model.GetType().Name}_{elementType.Name} WHEN ( SELECT COUNT(*) FROM {model.GetType().Name}_{elementType.Name} WHERE {elementType.Name}ID = old.{elementType.Name}ID ) = 0 ";
-                            deleteTrigger2 += $"BEGIN DELETE FROM {elementType.Name} WHERE {GetPkFieldName(elementType)} = old.{elementType.Name}ID; END;";
-
-                            triggers = new() { deleteTrigger1, deleteTrigger2 };
-
-
-                            // m:n relathionship
-                            // when we have m:n relationships, both types are non primitives
+                            triggers = new() { deleteTriggers.Item1, deleteTriggers.Item2 };
 
                             // create table for the new object
                             tables.AddRange(GetTableHierarchy(Activator.CreateInstance(elementType)));
@@ -269,13 +260,14 @@ namespace EzMapper
 
                         if(action == DeleteAction.Cascade)
                         {
-                            deleteTrigger = $"CREATE TRIGGER DELETE_{prop.PropertyType.Name}_WHEN_{model.GetType().Name}_IS_DELETED ";
-                            deleteTrigger += $"AFTER DELETE ON {model.GetType().Name} BEGIN DELETE FROM {prop.PropertyType.Name} WHERE ";
-                            deleteTrigger += $"{prop.PropertyType.Name}.{GetPrimaryKeyPropertyName(prop.PropertyType)} ";
-                            deleteTrigger += $"= old.{prop.Name}{Default.IdProprtyName}; END;";
+                            deleteTrigger = SqlStatementBuilder.CreateDeleteTrigger(
+                                model.GetType().Name, 
+                                prop.PropertyType.Name, 
+                                GetPrimaryKeyPropertyName(prop.PropertyType), 
+                                prop.Name + Default.IdProprtyName);
                         }
 
-                        /*List<string>*/ triggers = new() { deleteTrigger };
+                        triggers = new() { deleteTrigger };
 
                         object obj = Activator.CreateInstance(prop.PropertyType);
                         tables.AddRange(GetTableHierarchy(obj, null, null,null,null, null));
@@ -299,7 +291,6 @@ namespace EzMapper
                 if (Types.HasAttribute<DefaultValueAttribute>(prop))
                     col.Constraints.Add("DEFAULT " + prop.GetCustomAttribute<DefaultValueAttribute>().Value);
 
-                //if (col.IsForeignKey) col.Constraints.Add("ON UPDATE CASCADE");
                 columns.Add(col);
             }
 

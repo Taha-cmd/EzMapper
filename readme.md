@@ -99,7 +99,8 @@ A code first object relational mapping framework for c# that uses SQLite under t
 
   EzMapper.Register(typeof(Order), typeof(Student)); // or pass all types via a single call
 
-  EzMapper.RegisterTypesFromAssembly(Assembly.GetExecutingAssembly()); // or scan the assembly for types. For this to work, you need to mark the types with the IEzModel interface
+  EzMapper.RegisterTypesFromAssembly(Assembly.GetExecutingAssembly()); // or scan the assembly for types.
+  //For this to work, you need to mark the types with the IEzModel interface
 
   EzMapper.Build(); // will build the database after registering all types
 
@@ -109,9 +110,9 @@ A code first object relational mapping framework for c# that uses SQLite under t
 - Saving, updating and deleting data
 
   ```c#
-  var person1 = new Student() { /*values*/ } // notice that we are creating a student as a person
-  var person2 = new Student() { /*values*/ }
-  var order = new Order() { /*values*/ }
+  var person1 = new Student() { /*values*/ }; // notice that we are creating a student as a person
+  var person2 = new Student() { /*values*/ };
+  var order = new Order() { /*values*/ };
 
   EzMapper.Save(person1, person2, order); // you can pass as many objects as you want to the save method
   await EzMapper.SaveAsync(person1, person2, order); // you can save your data async as well
