@@ -151,8 +151,12 @@ A code first object relational mapping framework for c# that uses SQLite under t
   var minorsWithNoPhone = EzMapper.Query<Student>(student => student.Age < 18 && student.Phone == null);
   var minorsWithNoPhone = await EzMapper.QueryAsync<Student>(student => student.Age < 18 && student.Phone == null);
 
+  //you can use the Contains method to filter based on collections of PRIMITIVES
+  var readers = EzMapper.Query<Student>(s => s.Hobbies.Contains("reading"));
+
+
   //limitations:
-  //for now, it not possible to query based on collection or nested properties. for example:
+  //for now, it not possible to query based on complex collection or nested properties. for example:
   EzMapper.Query<Student>(s => s.Phone.ID = 23); // THROWS
   EzMapper.Query<Student>(s => s.Books.Contains(new Book(){ID = 3})); // THROWS
   ```

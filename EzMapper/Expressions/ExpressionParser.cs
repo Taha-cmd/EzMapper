@@ -47,10 +47,12 @@ namespace EzMapper.Expressions
                 Type memberType = ((PropertyInfo)member.Member).PropertyType;
 
                 if(Types.IsPrimitive(memberType))
-                    sql.Append(member.Member.Name);
+                {
+                    //check owner here for nested objects
+                    sql.Append(member.Member.Name);  
+                } 
                 else
-                    sql.Append(member.Member.Name + "ID");
-
+                    sql.Append(member.Type.Name + "ID");
             }
             else if (expression is ConstantExpression @value)
             {
@@ -65,8 +67,6 @@ namespace EzMapper.Expressions
             }
             else if (expression is MethodCallExpression @call)
             {
-                //abandon plans
-
 
                 //calling contains on an array is an extensions method by linq
                 //thus, arg 0 is the array iteself and arg 1 is the actual arugment
@@ -95,19 +95,9 @@ namespace EzMapper.Expressions
                         //WHERE  "Swimming" IN(SELECT PersonHobbies.Hobbies FROM PersonHobbies WHERE PersonHobbies.PersonID = Teacher_PersonID)
 
 
-                break;
+                    break;
                 }
-
-                        //support for contains method
-
-
-                        //Console.WriteLine();
-                        //Console.WriteLine(call.Method.Name);
-                        //Console.WriteLine();
-                        //Console.WriteLine(call.Object);
-                        //Console.WriteLine(call.NodeType);
-                        //Console.WriteLine("HI");
-                }
+            }
 
             return sql.ToString();
         }

@@ -223,5 +223,19 @@ namespace EzMapper.Reflection
             return genericMethodInfo.Invoke(instance, arguments);
         }
 
+        public static IEnumerable<Type> GetSubTypes<T>(params Type[] types)
+        {
+            var subTypes = new List<Type>();
+
+            foreach (Type type in types)
+            {
+                if (type.IsAssignableTo(typeof(T)) && type != typeof(T))
+                    subTypes.Add(type);
+            }
+
+            return subTypes;
+        }
     }
+
+
 }

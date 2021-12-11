@@ -12,7 +12,7 @@ namespace EzMapper.ConsoleApp
     {
         static async Task Main(string[] args)
         {
-            File.Delete("db.sqlite");
+            File.Delete("db.sqlite"); // delete database to always start frish
 
             //EzMapper.Register<Student>(); // register each type via generic method
             //EzMapper.Register<Teacher>();
@@ -20,7 +20,6 @@ namespace EzMapper.ConsoleApp
             //EzMapper.Register(typeof(Student), typeof(Teacher)); register types in one call
 
             EzMapper.RegisterTypesFromAssembly(Assembly.GetExecutingAssembly()); // better way: scan assembly for types implementing the marker interface IEzModel
-
             EzMapper.Build();
 
             Person student = new Student()
@@ -100,17 +99,24 @@ namespace EzMapper.ConsoleApp
 
             EzMapper.Save(student, teacher1, teacher2, teacher3, teacher4);
 
+            var all = EzMapper.Get<Person>(); // supports polymorphism, can read all persons
             var students = await EzMapper.GetAsync<Student>();
             var teachers = EzMapper.Get<Teacher>();
 
-            var John = EzMapper.Get<Student>(1);
-            var Jane = EzMapper.Get<Teacher>(2);
-            var Jack = await EzMapper.GetAsync<Teacher>(3);
+
+            Person John1 = EzMapper.Get<Person>(1); // polymorphic read
+            Person Jane1 = await EzMapper.GetAsync<Person>(2);
+
+            Student John = EzMapper.Get<Student>(1); // concrete type read
+            Teacher Jane = EzMapper.Get<Teacher>(2);
+            Teacher Jack = await EzMapper.GetAsync<Teacher>(3);
 
 
-            int num = 25; // 
+            int num = 25; // filter with boolean operations on primitve properties
             var robert = EzMapper.Query<Teacher>(t => t.WorkingYears >= num && t.FirstName != "Will");
             var allButWill = EzMapper.Query<Teacher>(t => !(t.FirstName == "Will" && t.Age == 30));
+
+            // can check if a complex property is null
             var teachersWithNoCar = EzMapper.Query<Teacher>(t => t.Car == null);
             var teachersWithNoCarYoungerThan30 = EzMapper.Query<Teacher>(t => t.Car == null && t.Age < 30);
 

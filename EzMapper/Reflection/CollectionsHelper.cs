@@ -25,18 +25,37 @@ namespace EzMapper.Reflection
 
         }
 
-    //    public static object ConvertTo(object instance, Type targetType)
-    //    {
-    //        Type srcType = instance.GetType();
+        public static object FillCollection(IEnumerable<object> src, Type targetType)
+        {
 
-    //        if(srcType.IsArray)
-    //        {
-    //            if (targetType.IsArray)
-    //                return instance;
+            IList values = (IList)Activator.CreateInstance(targetType, src.Count());
 
-    //            IList list = (IList)Activator.CreateInstance(targetType);
-    //            list.ad
-    //        }
-    //    }
+            for (int i = 0; i < src.Count(); i++)
+            {
+                if(targetType.IsArray)
+                {
+                    values[i] = src.ElementAt(i);
+                    continue;
+                }
+
+                values.Add(src.ElementAt(i));
+            }
+
+            return values;
+        }
+
+        //public static object ConvertTo(object instance, Type targetType)
+        //{
+        //    Type srcType = instance.GetType();
+
+        //    if (srcType.IsArray)
+        //    {
+        //        if (targetType.IsArray)
+        //            return instance;
+
+        //        IList list = (List)Activator.CreateInstance(targetType);
+                
+        //        }
+        //}
     }
 }
