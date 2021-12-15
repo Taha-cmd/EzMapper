@@ -211,10 +211,31 @@ namespace EzMapper.Reflection
         {
             
             Type[] types = arguments.Select(arg => arg.GetType()).ToArray();
-            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Standard, types, null); // get private methods also
+            CallingConventions callingConvection = instance is null ? CallingConventions.Standard : CallingConventions.HasThis;
+            BindingFlags flag = instance is null ? BindingFlags.Static : BindingFlags.Instance;
+
+            var methodInfo = classType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Public | flag, null, callingConvection, types, null); // get private methods also
+
+            if (methodInfo is null)
+                throw new Exception("Something went wrong");
+
             var genericMethodInfo = methodInfo.MakeGenericMethod(typeArugment);
             return genericMethodInfo.Invoke(instance, arguments);
         }
 
+        public static IEnumerable<Type> GetSubTypes<T>(params Type[] types)
+        {
+            var subTypes = new List<Type>();
+
+            foreach (Type type in types)
+            {
+                if (type.IsAssignableTo(typeof(T)) && type != typeof(T))
+                    subTypes.Add(type);
+            }
+
+            return subTypes;
+        }
     }
+
+
 }

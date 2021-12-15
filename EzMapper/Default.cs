@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using log4net;
+using System.Runtime.CompilerServices;
 
 namespace EzMapper
 {
@@ -11,5 +8,7 @@ namespace EzMapper
         public const string DbName = "db.sqlite";
         public const string IdProprtyName = "ID";
         public const string OwnerIdPropertyName = "OwnerId";
+
+        public static ILog GetLogger([CallerFilePath] string filename = "") => LogManager.GetLogger(filename);
     }
 }

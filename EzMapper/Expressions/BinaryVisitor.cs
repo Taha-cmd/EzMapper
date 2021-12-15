@@ -1,19 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq.Expressions;
 
 namespace EzMapper.Expressions
 {
-    internal class RightHandValueResolver : ExpressionVisitor
+    internal class BinaryVisitor : ExpressionVisitor
     {
-        public Expression Modify(Expression expression)
-        {
-            return Visit(expression);
-        }
-
         protected override Expression VisitBinary(BinaryExpression binaryExpression)
         {
             if (binaryExpression.Right is MemberExpression @member)

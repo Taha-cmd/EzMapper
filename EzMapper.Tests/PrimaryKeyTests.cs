@@ -17,7 +17,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithTwoPrimaryKeys();
 
-            Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
+            NUnit.Framework.Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
         }
 
         [Test]
@@ -28,7 +28,7 @@ namespace EzMapper.Tests
             var actual = nameof(model.X);
             var returned = ModelParser.GetPrimaryKeyPropertyName(model.GetType());
 
-            Assert.IsTrue(actual == returned);
+            NUnit.Framework.Assert.IsTrue(actual == returned);
         }
 
         [Test]
@@ -38,7 +38,7 @@ namespace EzMapper.Tests
 
             var returned = ModelParser.GetPrimaryKeyPropertyName(model.GetType());
 
-            Assert.IsTrue("ID" == returned.ToUpper());
+            NUnit.Framework.Assert.IsTrue("ID" == returned.ToUpper());
         }
 
         [Test]
@@ -46,7 +46,7 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithNoPrimaryKey();
 
-            Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
+            NUnit.Framework.Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
         }
 
         [Test]
@@ -54,7 +54,16 @@ namespace EzMapper.Tests
         {
             var model = new ModelWithWrongPrimaryKeyDataType();
 
-            Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
+            NUnit.Framework.Assert.Throws<Exception>(() => ModelParser.GetPrimaryKeyPropertyName(model.GetType()));
+        }
+
+        [Test]
+        public void Model_Has_Inherited_PrimaryKey()
+        {
+            Parent obj = new Child<object>() { ID = 3 }; // polymorphic, id is an inherited id
+
+            string pkFieldName = ModelParser.GetPkFieldName(obj.GetType());
+            NUnit.Framework.Assert.IsTrue(pkFieldName == nameof(Parent) + "ID");
         }
         
     }

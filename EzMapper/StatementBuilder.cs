@@ -129,7 +129,7 @@ namespace EzMapper
             //important: create an alias for the target table on each join to avoid ambiguity
             // do that by cloning the table, since we are dealing with reference types here, creating a new alias will affect all tables
 
-            Assertion.NotNull(mainTable, nameof(mainTable));
+            Assert.NotNull(mainTable, nameof(mainTable));
 
 
             List<Table> tablesClone = new(tables);
@@ -225,7 +225,7 @@ namespace EzMapper
             var stmt = new SelectStatement(mainTable);
 
 
-            // join on parents to traverse inherited classed upwards
+            // join on parents to traverse inherited classes upwards
             while (pk.IsForeignKey)
             {
                 var fk = mainTable.ForeignKeys.Where(fk => fk.FieldName == pk.Name).First();
