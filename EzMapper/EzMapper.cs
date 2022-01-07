@@ -34,7 +34,6 @@ namespace EzMapper
         static EzMapper()
         {
             log4net.Config.XmlConfigurator.Configure();
-            //_db = new Database<SQLiteConnection, SQLiteCommand, SQLiteParameter>($"Data Source=./{Default.DbName}; Foreign Keys=True; Version=3;");
         }
         private EzMapper() { }
         public static void Register<T>() where T : class
@@ -162,7 +161,6 @@ namespace EzMapper
             {
                 throw new Exception($"error occured while deleting {typeof(T)} id: {id}. See inner exception for details", ex);
             }
-
         }
 
         public static int Delete(params object[] models)

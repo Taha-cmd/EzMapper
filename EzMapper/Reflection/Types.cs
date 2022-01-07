@@ -236,6 +236,4 @@ namespace EzMapper.Reflection
             return subTypes;
         }
     }
-
-
 }
