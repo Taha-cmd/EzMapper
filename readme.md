@@ -66,6 +66,15 @@ A code first object relational mapping framework for c# that uses SQLite under t
       [OnDelete(DeleteAction.Cascade)]
       public List<string> Hobbies {get;set;}
   }
+
+
+  // usage:
+
+  EzMapper.Register<Student>();
+  EzMapper.Build();
+
+  // these two lines are enough to persist the whole hierarchy.
+
   ```
 
   In this example, you only need to register the student class. The Framework will recognize that a Student is an inherited class, so it will try to create the Person class first. When iterating through the properties of a person, the Framework will recognize that the Books property is a collection of another class, so the Book class will also be handled. Similarly, the Phone class will also be created. Notice that we can use collections of both primitive and complex types.
